@@ -1,6 +1,6 @@
-rccl (5.3.0-2) UNRELEASED; urgency=medium
+rccl (5.3.0-1) UNRELEASED; urgency=medium
 
   [ Cordell Bloor ]
-  * Initial release. (Closes: #NNNNNN)
+  * Initial release. (Closes: #1022889)
 
  -- Cordell Bloor <cgmb@slerp.xyz>  Tue, 25 Oct 2022 19:26:26 -0600
