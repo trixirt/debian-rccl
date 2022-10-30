@@ -23,10 +23,26 @@ Package: librccl2
 Section: libs
 Architecture: any
 Depends: ${misc:Depends}, ${shlibs:Depends},
-Description: TODO
+Description: ROCm Communication Collectives Library - library
+ RCCL (pronounced "Rickle") is a library of collective communication routines
+ built on the AMD ROCm platform and optimized for discrete AMD GPUs. It
+ implements routines such as all-reduce, all-gather, reduce, broadcast,
+ reduce-scatter, gather, scatter and all-to-all. The library is optimized for
+ high bandwidth over channels including PCIe, xGMI, InfiniBand Verbs or TCP/IP
+ sockets and supports an arbitrary number of GPUs.
+ .
+ This package provides the RCCL library.
 
 Package: librccl-dev
 Section: libdevel
 Architecture: any
 Depends: librccl2 (= ${binary:Version}),${misc:Depends}, ${shlibs:Depends},
-Description: TODO
+Description: ROCm Communication Collectives Library - headers
+ RCCL (pronounced "Rickle") is a library of collective communication routines
+ built on the AMD ROCm platform and optimized for discrete AMD GPUs. It
+ implements routines such as all-reduce, all-gather, reduce, broadcast,
+ reduce-scatter, gather, scatter and all-to-all. The library is optimized for
+ high bandwidth over channels including PCIe, xGMI, InfiniBand Verbs or TCP/IP
+ sockets and supports an arbitrary number of GPUs.
+ .
+ This package provides the RCCL development headers.
