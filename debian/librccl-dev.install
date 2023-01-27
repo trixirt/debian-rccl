@@ -1,3 +1,3 @@
 usr/include/rccl
-usr/lib/cmake
-usr/lib/librccl.so
+usr/lib/*/cmake/rccl
+usr/lib/*/librccl.so
