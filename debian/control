@@ -21,7 +21,7 @@ Build-Depends: debhelper-compat (= 13),
                libgtest-dev <!nocheck>
 Rules-Requires-Root: no
 
-Package: librccl2
+Package: librccl1
 Section: libs
 Architecture: any
 Depends: ${misc:Depends}, ${shlibs:Depends},
@@ -38,7 +38,7 @@ Description: ROCm Communication Collectives Library - library
 Package: librccl-dev
 Section: libdevel
 Architecture: any
-Depends: librccl2 (= ${binary:Version}),${misc:Depends}, ${shlibs:Depends},
+Depends: librccl1 (= ${binary:Version}),${misc:Depends}, ${shlibs:Depends},
 Description: ROCm Communication Collectives Library - headers
  RCCL (pronounced "Rickle") is a library of collective communication routines
  built on the AMD ROCm platform and optimized for discrete AMD GPUs. It
