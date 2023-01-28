@@ -16,6 +16,7 @@ Build-Depends: debhelper-compat (= 13),
                rocm-cmake,
                librocm-smi-dev,
                liboam-dev,
+               patchelf,
                chrpath <!nocheck>,
                libgtest-dev <!nocheck>
 Rules-Requires-Root: no
