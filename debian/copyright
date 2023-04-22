@@ -1,0 +1,254 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Source: https://github.com/ROCmSoftwarePlatform/rccl
+Upstream-Name: rccl
+
+Files: *
+Copyright: 2019-2022, Advanced Micro Devices, Inc.
+ 2015-2022, NVIDIA CORPORATION.
+License: BSD-3-clause
+
+Files: .jenkins/*
+Copyright: 2019-2022, Advanced Micro Devices, Inc.
+License: BSD-3-clause
+
+Files: cmake/DownloadProject.CMakeLists.cmake.in
+ cmake/DownloadProject.cmake
+Copyright: 2015, Craig Scott
+License: Expat
+Comment:
+ Files look to originate from [1].
+ .
+ [1]: https://github.com/Crascit/DownloadProject
+
+Files: cmake/Dependencies.cmake
+ cmake/git_version.cmake
+Copyright: 2019-2022, Advanced Micro Devices, Inc.
+License: Expat
+
+Files: docs/*
+Copyright: 2019-2022, Advanced Micro Devices, Inc.
+License: BSD-3-clause
+
+Files: ext-net/*
+Copyright: 2015-2022, NVIDIA CORPORATION.
+License: BSD-3-clause
+
+Files: pkg/*
+Copyright: 2015-2022, NVIDIA CORPORATION.
+License: BSD-3-clause
+
+Files: src/*
+Copyright: 2019-2022, Advanced Micro Devices, Inc.
+ 2015-2022, NVIDIA CORPORATION.
+License: BSD-3-clause
+
+Files: src/Makefile
+ src/bootstrap.cc
+ src/enhcompat.cc
+ src/nccl.pc.in
+ src/net.cc
+Copyright: 2015-2022, NVIDIA CORPORATION.
+License: BSD-3-clause
+
+Files: src/clique/*
+Copyright: 2019-2022, Advanced Micro Devices, Inc.
+License: Expat
+
+Files: src/collectives/device/Makefile
+ src/collectives/device/all_gather.cu
+ src/collectives/device/all_reduce.cu
+ src/collectives/device/alltoall_pivot.cu
+ src/collectives/device/alltoall_pivot.h
+ src/collectives/device/broadcast.cu
+ src/collectives/device/broadcast.h
+ src/collectives/device/gen_rules.sh
+ src/collectives/device/reduce.cu
+ src/collectives/device/reduce_scatter.cu
+ src/collectives/device/sendrecv.cu
+Copyright: 2015-2022, NVIDIA CORPORATION.
+License: BSD-3-clause
+
+Files: src/collectives/device/onerank_reduce.cu
+Copyright: 2019-2022, NVIDIA CORPORATION.
+ 2019-2022, Advanced Micro Devices, Inc.
+License: BSD-3-clause
+
+Files: src/graph/rings.cc
+ src/graph/rings.h
+ src/graph/trees.cc
+Copyright: 2015-2022, NVIDIA CORPORATION.
+License: BSD-3-clause
+
+Files: src/graph/rome_models.cc
+ src/graph/rome_models.h
+Copyright: 2019-2022, Advanced Micro Devices, Inc.
+License: Expat
+
+Files: src/graph/xml.cc
+ src/graph/xml.h
+Copyright: 2019-2022, NVIDIA CORPORATION.
+ 2019-2022, Advanced Micro Devices, Inc.
+License: BSD-3-clause
+
+Files: src/include/*
+Copyright: 2015-2022, NVIDIA CORPORATION.
+License: BSD-3-clause
+
+Files: src/include/BfdBacktrace.hpp
+Copyright: 2001-2014, Mellanox Technologies Ltd.
+ 2022, Advanced Micro Devices, Inc.
+License: BSD-3-clause
+
+Files: src/include/alloc.h
+ src/include/checks.h
+ src/include/gdrwrap.h
+ src/include/info.h
+Copyright: 2019-2022, NVIDIA CORPORATION.
+ 2019-2022, Advanced Micro Devices, Inc.
+License: BSD-3-clause
+
+Files: src/include/bootstrap.h
+ src/include/collectives.h
+ src/include/comm.h
+ src/include/core.h
+ src/include/devcomm.h
+ src/include/enqueue.h
+ src/include/graph.h
+ src/include/group.h
+ src/include/param.h
+ src/include/proxy.h
+ src/include/transport.h
+Copyright: 2019-2022, Advanced Micro Devices, Inc.
+ 2015-2022, NVIDIA CORPORATION.
+License: BSD-3-clause
+
+Files: src/include/git_version.h
+ src/include/signals.h
+Copyright: 2019-2022, Advanced Micro Devices, Inc.
+License: BSD-3-clause
+
+Files: src/include/ibvwrap.h
+Copyright: 2015-2022, NVIDIA CORPORATION.
+ 2005-2007, Cisco Systems, Inc.
+ 2005, PathScale, Inc.
+ 2004, 2011, 2012, Intel Corporation.
+ 2004, 2005, Topspin Communications.
+License: BSD-3-clause
+
+Files: src/include/npkit/*
+ src/misc/npkit.cc
+Copyright: 2021, Microsoft Corporation.
+License: Expat
+Comment: These files were contributed by Microsoft in
+ https://github.com/ROCmSoftwarePlatform/rccl/pull/564
+ but they lack a copyright header. However, they are also
+ distributed as patches at https://github.com/microsoft/NPKit.
+
+Files: src/include/nvtx3.hpp
+Copyright: 2020, NVIDIA CORPORATION.
+License: Apache-2.0
+
+Files: src/include/nvtx3/*
+Copyright: 2009-2020, NVIDIA Corporation.
+License: Apache-2.0
+
+Files: src/include/rccl_bfloat16.h
+ src/include/rccl_vars.h
+ src/include/rocm_smi_wrap.h
+Copyright: 2019-2022, Advanced Micro Devices, Inc.
+License: Expat
+
+Files: src/misc/*
+Copyright: 2015-2022, NVIDIA CORPORATION.
+License: BSD-3-clause
+
+Files: src/misc/argcheck.cc
+Copyright: 2019-2022, NVIDIA CORPORATION.
+ 2019-2022, Advanced Micro Devices, Inc.
+License: BSD-3-clause
+
+Files: src/misc/nvmlwrap_stub.cc
+ src/misc/utils.cc
+Copyright: 2019-2022, Advanced Micro Devices, Inc.
+ 2015-2022, NVIDIA CORPORATION.
+License: BSD-3-clause
+
+Files: src/misc/rocm_smi_wrap.cc
+Copyright: 2019-2022, Advanced Micro Devices, Inc.
+License: Expat
+
+Files: src/misc/signals.cc
+Copyright: 2019-2022, Advanced Micro Devices, Inc.
+License: BSD-3-clause
+
+Files: src/transport/net_socket.cc
+ src/transport/shm.cc
+Copyright: 2015-2022, NVIDIA CORPORATION.
+License: BSD-3-clause
+
+Files: test/*
+Copyright: 2019-2022, Advanced Micro Devices, Inc.
+License: BSD-3-clause
+
+Files: tools/*
+Copyright: 2019-2022, Advanced Micro Devices, Inc.
+License: BSD-3-clause
+
+Files: tools/HelloRccl/HelloRccl.cpp
+ tools/HelloRccl/HelloRccl.hpp
+Copyright: 2019-2022, Advanced Micro Devices, Inc.
+License: Expat
+
+Files: tools/TopoVisual/*
+Copyright: 2019-2020, Advanced Micro Devices, Inc.
+License: BSD-3-clause
+
+Files: tools/TopoVisual/extract_topo.awk
+ tools/TopoVisual/topo_visual.sh
+Copyright: 2019-2022, Advanced Micro Devices, Inc.
+License: Expat
+
+Files: tools/TransferBench/*
+Copyright: 2019-2022, Advanced Micro Devices, Inc.
+License: Expat
+
+Files: tools/ib-test/*
+Copyright: 2019-2022, Advanced Micro Devices, Inc.
+ 2015-2022, NVIDIA CORPORATION.
+License: BSD-3-clause
+
+Files: tools/ib-test/Makefile
+Copyright: 2019-2022, Advanced Micro Devices, Inc.
+License: BSD-3-clause
+
+Files: tools/rccl-prim-test/copy_kernel.h
+Copyright: 2019-2022, Advanced Micro Devices, Inc.
+ 2015-2022, NVIDIA CORPORATION.
+License: BSD-3-clause
+
+Files: tools/rccl-prim-test/rccl_prim_test.cpp
+Copyright: 2019-2022, Advanced Micro Devices, Inc.
+License: Expat
+
+Files: tools/scripts/topo_val.sh
+Copyright: 2019-2022, Advanced Micro Devices, Inc.
+License: Expat
+
+Files: tools/topo_expl/include/*
+Copyright: 2019-2022, Advanced Micro Devices, Inc.
+ 2015-2022, NVIDIA CORPORATION.
+License: BSD-3-clause
+
+Files: tools/topo_expl/include/model.h
+Copyright: 2019-2022, Advanced Micro Devices, Inc.
+License: Expat
+
+Files: tools/topo_expl/model.cpp
+ tools/topo_expl/topo_expl.cpp
+Copyright: 2019-2022, Advanced Micro Devices, Inc.
+License: Expat
+
+Files: tools/topo_expl/utils.cpp
+Copyright: 2019-2022, Advanced Micro Devices, Inc.
+ 2015-2022, NVIDIA CORPORATION.
+License: BSD-3-clause
