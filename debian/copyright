@@ -77,10 +77,6 @@ Files: src/clique/*
 Copyright: 2019-2022, Advanced Micro Devices, Inc.
 License: Expat
 
-Files: tools/*
-Copyright: 2019-2022, Advanced Micro Devices, Inc.
-License: BSD-3-Clause-Nvidia
-
 Files: tools/ib-test/*
        tools/rccl-prim-test/copy_kernel.h
        tools/topo_expl/include/*
