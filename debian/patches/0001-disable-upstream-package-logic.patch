@@ -2,6 +2,7 @@ From: Cordell Bloor <cgmb@slerp.xyz>
 Date: Tue, 25 Oct 2022 22:11:07 -0600
 Subject: disable upstream package logic
 
+Forwarded: not-needed
 ---
  CMakeLists.txt | 2 +-
  1 file changed, 1 insertion(+), 1 deletion(-)
