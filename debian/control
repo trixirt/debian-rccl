@@ -39,6 +39,7 @@ Package: librccl-dev
 Section: libdevel
 Architecture: amd64 arm64 ppc64el
 Depends: librccl1 (= ${binary:Version}),${misc:Depends}, ${shlibs:Depends},
+         libamdhip64-dev,
 Description: ROCm Communication Collectives Library - headers
  RCCL (pronounced "Rickle") is a library of collective communication routines
  built on the AMD ROCm platform and optimized for discrete AMD GPUs. It
