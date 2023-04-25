@@ -1,4 +1,4 @@
-rccl (5.3.3-1) unstable; urgency=medium
+rccl (5.3.3-1) experimental; urgency=medium
 
   * Initial release. (Closes: #1022889)
 
