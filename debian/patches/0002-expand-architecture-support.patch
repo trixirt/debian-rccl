@@ -4,7 +4,7 @@ Subject: expand architecture support
 
 Expand support from Navi 21 to the whole Navi family.
 
-Forwarded: no
+Forwarded: https://github.com/ROCmSoftwarePlatform/rccl/pull/740
 ---
  src/collectives/device/prims_ll128.h  |  9 ++++++++-
  src/collectives/device/prims_simple.h | 12 ++++++++++--
