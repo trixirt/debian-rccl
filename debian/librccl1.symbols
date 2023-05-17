@@ -1,4 +1,5 @@
 librccl.so.1 librccl1 #MINVER#
+* Build-Depends-Package: librccl-dev
  (optional)_Z42ncclKernel_SendRecv_RING_SIMPLE_Sum_int8_tP11ncclDevComm@Base 5.3.3
  (optional)_Z47ncclKernelDebug_SendRecv_RING_SIMPLE_Sum_int8_tP11ncclDevComm@Base 5.3.3
  (optional)_Z47ncclKernelLL128_SendRecv_RING_SIMPLE_Sum_int8_tP11ncclDevComm@Base 5.3.3
