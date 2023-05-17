@@ -1,6 +1,7 @@
 #!/usr/bin/make -f
 export CXX=hipcc
 export DEB_BUILD_MAINT_OPTIONS = hardening=+all
+export DEB_CXXFLAGS_MAINT_PREPEND = -gdwarf-4
 export VERBOSE=1
 #export AMD_LOG_LEVEL=4
 
@@ -37,7 +38,3 @@ execute_before_dh_install:
 	# Note the rpath field setting may cause reproducible build issues.
 	# This should be removed earlier in the toolchain if possible.
 	patchelf --remove-rpath ./debian/tmp/usr/lib/$(DEB_HOST_MULTIARCH)/librccl.so.1.0
-
-override_dh_dwz:
-	@echo "W: debug symbols unavailable for the moment[1]."
-	@echo "W: [1]: https://github.com/ROCm-Developer-Tools/hipamd/issues/17"
