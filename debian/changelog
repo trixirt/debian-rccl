@@ -1,3 +1,9 @@
+rccl (5.3.3-2) unstable; urgency=medium
+
+  * d/p/0002-expand-architecture-support.patch: update patch metadata
+
+ -- Cordell Bloor <cgmb@slerp.xyz>  Wed, 17 May 2023 12:07:24 -0600
+
 rccl (5.3.3-1) experimental; urgency=medium
 
   * Initial release. (Closes: #1022889)
