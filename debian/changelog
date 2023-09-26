@@ -1,3 +1,11 @@
+rccl (5.3.3-3) unstable; urgency=medium
+
+  * Filter cf-protection hardening from device code.
+    Fixes a FTBFS with dpkg >= 1.22 (Closes: #1052954)
+  * Add myself to Uploaders
+
+ -- Christian Kastner <ckk@debian.org>  Tue, 26 Sep 2023 17:55:22 +0200
+
 rccl (5.3.3-2) unstable; urgency=medium
 
   * Migrate to unstable.
