@@ -1,6 +1,6 @@
 Source: rccl
 Section: devel
-Homepage: https://github.com/rocmsoftwareplatform/rccl
+Homepage: https://github.com/ROCm/rccl
 Priority: optional
 Standards-Version: 4.6.2
 Vcs-Git: https://salsa.debian.org/rocm-team/rccl.git

@@ -1,5 +1,5 @@
 version=4
 opts="filenamemangle=s%(?:.*?)?v?(\d[\d.]*)\.tar\.gz%rccl-$1.tar.gz%" \
-    https://github.com/rocmsoftwareplatform/rccl/tags \
+    https://github.com/rocm/rccl/tags \
     (?:.*?/)?rocm-v?(\d[\d.]*)\.tar\.gz debian
 
