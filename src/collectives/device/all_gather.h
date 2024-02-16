@@ -13,22 +13,47 @@ namespace {
   template<typename T, typename RedOp, typename Proto>
   __device__ __attribute__((noinline)) void runRing(ncclWorkElem *args) {
     const int tid = threadIdx.x;
-    const int nthreads = args->header.nWarps*WARP_SIZE;
+    const int nthreads = args->nWarps*WARP_SIZE;
     const int bid = args->bid;
     const int nChannels = args->nChannels;
-    ncclRing *ring = &ncclShmem->channel.ring;
-    const int *ringRanks = ring->devUserRanks;
+    ncclRing *ring = &ncclShmem.channel.ring;
+    const int *ringRanks = ring->userRanks;
     const ssize_t chunkSize = int(Proto::calcBytePerStep()/sizeof(T) * (Proto::Id == NCCL_PROTO_SIMPLE ? ALLGATHER_CHUNKSTEPS : 1));
     // We should not need the final /2 but it makes performance much, much smoother. Might be a bug somewhere.
     const ssize_t minChunkSizeLL128 = int(nthreads*(Proto::calcBytePerGrain()/sizeof(T))/2);
-    const int nranks = ncclShmem->comm.nRanks;
+    const int nranks = ncclShmem.comm.nRanks;
     const ssize_t loopSize = nChannels*int(chunkSize);
     const ssize_t size = args->count;
+
+#if defined(ENABLE_NPKIT)
+    int npKitCtxIdx = bid;
+#endif
+
+#if defined(ENABLE_NPKIT) && defined(ENABLE_NPKIT_EVENT_TIME_SYNC_CPU)
+    if (tid == 0) {
+      uint64_t* cpuTimestamp = ncclShmem.comm.cpuTimestamp;
+      NpKit::CollectGpuEvent(NPKIT_EVENT_TIME_SYNC_CPU, 0, 0, *cpuTimestamp,
+          ncclShmem.comm.npKitEventCollectContexts + npKitCtxIdx);
+    }
+#endif
+
+#if defined(ENABLE_NPKIT) && defined(ENABLE_NPKIT_EVENT_TIME_SYNC_GPU)
+    if (tid == 0) {
+      NpKit::CollectGpuEvent(NPKIT_EVENT_TIME_SYNC_GPU, 0, 0, __builtin_amdgcn_s_memrealtime(),
+          ncclShmem.comm.npKitEventCollectContexts + npKitCtxIdx);
+    }
+#endif
 
     T *inputBuf = (T*)args->sendbuff;
     T *outputBuf = (T*)args->recvbuff;
     Primitives<T, RedOp, FanSymmetric<1>, 0, Proto, 0> prims
       (tid, nthreads, &ring->prev, &ring->next, inputBuf, outputBuf, args->redOpArg, args->connIndex << 16);
+
+#if defined(ENABLE_NPKIT)
+    if (tid == 0) {
+      prims.npKitCtxIdx = npKitCtxIdx;
+    }
+#endif
 
     for (ssize_t gridOffset = 0; gridOffset < size; gridOffset += loopSize) {
       ssize_t realChunkSize;
@@ -79,7 +104,7 @@ namespace {
 
 template<typename T, typename RedOp>
 struct RunWorkElement<ncclFuncAllGather, T, RedOp, NCCL_ALGO_RING, NCCL_PROTO_SIMPLE> {
-  __device__ __attribute__((noinline)) void run(ncclWorkElem *args) {
+  __device__ __forceinline__ void run(ncclWorkElem *args) {
     using Proto = ProtoSimple<ALLGATHER_CHUNKSTEPS/ALLGATHER_SLICESTEPS, ALLGATHER_SLICESTEPS>;
     runRing<T, RedOp, Proto>(args);
   }
@@ -87,14 +112,14 @@ struct RunWorkElement<ncclFuncAllGather, T, RedOp, NCCL_ALGO_RING, NCCL_PROTO_SI
 
 template<typename T, typename RedOp>
 struct RunWorkElement<ncclFuncAllGather, T, RedOp, NCCL_ALGO_RING, NCCL_PROTO_LL> {
-  __device__ __attribute__((noinline)) void run(ncclWorkElem *args) {
+  __device__ __forceinline__ void run(ncclWorkElem *args) {
     runRing<T, RedOp, ProtoLL>(args);
   }
 };
 
 template<typename T, typename RedOp>
 struct RunWorkElement<ncclFuncAllGather, T, RedOp, NCCL_ALGO_RING, NCCL_PROTO_LL128> {
-  __device__ __attribute__((noinline)) void run(ncclWorkElem *args) {
+  __device__ __forceinline__ void run(ncclWorkElem *args) {
     runRing<T, RedOp, ProtoLL128>(args);
   }
 };

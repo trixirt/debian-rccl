@@ -5,10 +5,11 @@
  * See LICENSE.txt for license information
  ************************************************************************/
 
-#include "op128.h"
+#if defined(ENABLE_NPKIT)
+#include "npkit/npkit.h"
+#endif
 
 #define NCCL_LL128_FLAGTHREAD (NCCL_LL128_LINEELEMS-1)
-
 
 template<typename T, typename RedOp, typename Fan, int Direct, int P2p>
 class Primitives<T, RedOp, Fan, Direct, ProtoLL128, P2p>:
@@ -53,6 +54,15 @@ class Primitives<T, RedOp, Fan, Direct, ProtoLL128, P2p>:
   uint64_t* barriers;
   uint64_t* barrier_next;
 
+#if defined(ENABLE_NPKIT)
+public:
+  int npKitCtxIdx = 0;
+  uint64_t npKitDataProcessEntryTime = 0;
+  uint64_t npKitDataProcessExitTime = 0;
+  uint64_t npKitDataProcessTotalTime = 0;
+private:
+#endif
+
   inline __device__ void barrier() {
 #if defined(__HIP_PLATFORM_HCC__) || defined(__HCC__) || defined(__HIPCC__)
   if (nthreads != WARP_SIZE)
@@ -68,7 +78,7 @@ class Primitives<T, RedOp, Fan, Direct, ProtoLL128, P2p>:
   inline __device__ int checkAbort(int &spins, int i, int send) {
     spins++;
     if (abort == 0 && spins == NCCL_SPINS_BEFORE_CHECK_ABORT) {
-      abort = __atomic_load_n(ncclShmem->comm.abortFlag, __ATOMIC_SEQ_CST);
+      abort = __atomic_load_n(ncclShmem.comm.abortFlag, __ATOMIC_SEQ_CST);
       spins = 0;
     }
     return abort;
@@ -78,7 +88,7 @@ class Primitives<T, RedOp, Fan, Direct, ProtoLL128, P2p>:
     if (sendConnHeadPtr) {
       int spins = 0;
       while (sendConnHeadCache + NCCL_STEPS < sendConnHead + 1) {
-        __builtin_amdgcn_s_sleep(8);
+        __builtin_amdgcn_s_sleep(1);
         sendConnHeadCache = atomicAdd_system((unsigned long long *)sendConnHeadPtr, 0);
         if (checkAbort(spins, wid, 1)) break;
       }
@@ -91,10 +101,10 @@ class Primitives<T, RedOp, Fan, Direct, ProtoLL128, P2p>:
   }
 
   inline __device__ void postRecv() {
-    if (recvConnHeadPtr) atomicExch_system((unsigned long long *)recvConnHeadPtr, recvConnHead += 1);
+    if (recvConnHeadPtr) STORE(recvConnHeadPtr, recvConnHead += 1);
   }
   inline __device__ void postSend() {
-    if (sendConnTailPtr) { __threadfence(); atomicExch_system((unsigned long long *)sendConnTailPtr, sendConnTail += 1); }
+    if (sendConnTailPtr) { __threadfence(); STORE((unsigned long long *)sendConnTailPtr, sendConnTail += 1); }
   }
 
   template<int WordPerThread>
@@ -287,7 +297,7 @@ class Primitives<T, RedOp, Fan, Direct, ProtoLL128, P2p>:
       }
     }
 
-#if !defined(__gfx1030__)
+#if !defined(__gfx1030__) && !defined(__gfx1100__) && !defined(__gfx1101__) && !defined(__gfx1102__)
     if (tid == 0) __asm__ __volatile__("buffer_wbinvl1_vol");
 #endif
     /************************ Send **************************/
@@ -398,18 +408,18 @@ public:
     redOp(redOpArg),
     tid(tid), nthreads(nthreads), wid(tid%WARP_SIZE), warp(tid/WARP_SIZE),
     flagThread((tid%4)==3), group(group&(uint16_t)0xFFFF),
-    stepSize(ncclShmem->comm.buffSizes[NCCL_PROTO_LL128]/NCCL_STEPS/sizeof(uint64_t)) {
-    barriers = &ncclShmem->groups[this->group].barrier;
-    barrier_next = ncclShmem->groups[this->group].barrier_next;
+    stepSize(ncclShmem.comm.buffSizes[NCCL_PROTO_LL128]/NCCL_STEPS/sizeof(uint64_t)) {
+    barriers = &ncclShmem.groups[this->group].barrier;
+    barrier_next = ncclShmem.groups[this->group].barrier_next;
 
-    auto *channel = &ncclShmem->channel;
+    auto *channel = &ncclShmem.channel;
     int nrecv=0, nsend=0;
     while (nrecv < MaxRecv && recvPeers[nrecv] >= 0) {
-      loadRecvConn(&channel->devPeers[recvPeers[nrecv]].recv->conn, nrecv);
+      loadRecvConn(&channel->peers[recvPeers[nrecv]].recv[0], nrecv);
       nrecv++;
     }
     while (nsend < MaxSend && sendPeers[nsend] >= 0) {
-      loadSendConn(&channel->devPeers[sendPeers[nsend]].send->conn, nsend);
+      loadSendConn(&channel->peers[sendPeers[nsend]].send[0], nsend);
       nsend++;
     }
     this->fan = Fan(nrecv, nsend);

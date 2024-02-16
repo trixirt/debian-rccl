@@ -1,7 +1,14 @@
+/*************************************************************************
+ * Copyright (c) 2022 Advanced Micro Devices, Inc. All rights reserved.
+ *
+ * See LICENSE.txt for license information
+ ************************************************************************/
+
 #pragma once
 #include "ErrCode.hpp"
 #include "rccl/rccl.h"
 #include "rccl_bfloat16.h"
+#include "hip/hip_fp16.h"
 
 namespace RcclUnitTesting
 {
@@ -35,6 +42,7 @@ namespace RcclUnitTesting
     uint32_t*      U4; // ncclUint32
     int64_t*       I8; // ncclInt64
     uint64_t*      U8; // ncclUint64
+    __half*        F2; // ncclFloat16
     float*         F4; // ncclFloat32
     double*        F8; // ncclFloat64
     rccl_bfloat16* B2; // ncclBfloat16

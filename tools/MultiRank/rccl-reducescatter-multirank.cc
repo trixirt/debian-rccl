@@ -1,3 +1,9 @@
+/*************************************************************************
+ * Copyright (c) 2022 Advanced Micro Devices, Inc. All rights reserved.
+ *
+ * See LICENSE.txt for license information
+ ************************************************************************/
+
 /* -*- Mode: C; c-basic-offset:4 ; indent-tabs-mode:nil -*- */
 #include <stdio.h>
 #include "hip/hip_runtime.h"
@@ -174,7 +180,7 @@ int main(int argc, char* argv[])
       HIPCHECK(hipMalloc(recvbuff+i, recvsize*sizeof(float)));
       h_recvbuff[i] = (float*) malloc (recvsize *sizeof(float));
       HIPCHECK(hipMemset(recvbuff[i], 0, recvsize*sizeof(float)));
-
+      HIPCHECK(hipStreamSynchronize(NULL));
       HIPCHECK(hipStreamCreate(s+i));
   }
 
