@@ -7,11 +7,9 @@ Forwarded: not-needed
  CMakeLists.txt | 2 +-
  1 file changed, 1 insertion(+), 1 deletion(-)
 
-diff --git a/CMakeLists.txt b/CMakeLists.txt
-index 9fd911c..7484ef6 100644
 --- a/CMakeLists.txt
 +++ b/CMakeLists.txt
-@@ -379,7 +379,7 @@ set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
+@@ -380,7 +380,7 @@
  set(CPACK_RPM_EXCLUDE_FROM_AUTO_FILELIST_ADDITION "/opt" "${ROCM_PATH}")
  
  find_file (DEBIAN debian_version debconf.conf PATHS /etc)

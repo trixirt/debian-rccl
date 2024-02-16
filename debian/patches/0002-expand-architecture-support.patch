@@ -11,11 +11,9 @@ Forwarded: https://github.com/ROCm/rccl/pull/740
  src/include/devcomm.h                 |  2 +-
  3 files changed, 19 insertions(+), 4 deletions(-)
 
-diff --git a/src/collectives/device/prims_ll128.h b/src/collectives/device/prims_ll128.h
-index bd484a4..3bb85e1 100644
 --- a/src/collectives/device/prims_ll128.h
 +++ b/src/collectives/device/prims_ll128.h
-@@ -9,6 +9,13 @@
+@@ -11,6 +11,14 @@
  
  #define NCCL_LL128_FLAGTHREAD (NCCL_LL128_LINEELEMS-1)
  
@@ -26,20 +24,19 @@ index bd484a4..3bb85e1 100644
 +#define RCCL_USE_WBINVL1_VOL 0
 +#endif
 +#endif
- 
++
  template<typename T, typename RedOp, typename Fan, int Direct, int P2p>
  class Primitives<T, RedOp, Fan, Direct, ProtoLL128, P2p>:
-@@ -287,7 +294,7 @@ class Primitives<T, RedOp, Fan, Direct, ProtoLL128, P2p>:
+   public PrimitivesWithoutDirect<Primitives<T, RedOp, Fan, Direct, ProtoLL128, P2p>> {
+@@ -297,7 +305,7 @@
        }
      }
  
--#if !defined(__gfx1030__)
+-#if !defined(__gfx1030__) && !defined(__gfx1100__) && !defined(__gfx1101__) && !defined(__gfx1102__)
 +#if RCCL_USE_WBINVL1_VOL
      if (tid == 0) __asm__ __volatile__("buffer_wbinvl1_vol");
  #endif
      /************************ Send **************************/
-diff --git a/src/collectives/device/prims_simple.h b/src/collectives/device/prims_simple.h
-index bd58deb..096c9a3 100644
 --- a/src/collectives/device/prims_simple.h
 +++ b/src/collectives/device/prims_simple.h
 @@ -9,6 +9,14 @@
@@ -57,29 +54,9 @@ index bd58deb..096c9a3 100644
  template<typename T, typename RedOp, typename Fan, int Direct,
           int SlicePerChunk, int StepPerSlice, int Unroll, int P2p>
  class Primitives<
-@@ -330,7 +338,7 @@ private:
- 
-         }
-         barrier(); // This barrier has a counterpart in following loop
--#if defined(__gfx1030__)
-+#if RCCL_USE_THREADFENCE_SYSTEM
- 	if (Send && (flags & RolePostSend) && index == 0) __threadfence_system();
- #endif
- 	__syncwarp();
-@@ -352,7 +360,7 @@ private:
-         waitPeer<DirectRecv, DirectSend, Recv, Send, Src, Dst>(0, 0, 0, 0);
-       }
-       barrier(); // Has couterpart in preceding worker-only loop.
--#if defined(__gfx1030__)
-+#if RCCL_USE_THREADFENCE_SYSTEM
-       if (Send && (flags & RolePostSend) && sliceSize > 0 && index == 0) __threadfence_system();
- #endif
-       __syncwarp();
-diff --git a/src/include/devcomm.h b/src/include/devcomm.h
-index 0061f77..37f1e48 100644
 --- a/src/include/devcomm.h
 +++ b/src/include/devcomm.h
-@@ -55,7 +55,7 @@ union ncclLLFifoLine {
+@@ -51,7 +51,7 @@
    int4 i4;
  };
  
