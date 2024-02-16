@@ -1,9 +1,10 @@
-rccl (5.3.3-4) UNRELEASED; urgency=medium
+rccl (5.4.3-1) UNRELEASED; urgency=medium
 
+  * New upstream version 5.4.3
   * Update upstream URLs
   * d/control: update maintainer name for consistency
 
- -- Cordell Bloor <cgmb@slerp.xyz>  Fri, 16 Feb 2024 11:33:56 -0700
+ -- Cordell Bloor <cgmb@slerp.xyz>  Fri, 16 Feb 2024 11:35:47 -0700
 
 rccl (5.3.3-3) unstable; urgency=medium
 
