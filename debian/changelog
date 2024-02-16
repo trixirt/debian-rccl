@@ -1,10 +1,13 @@
-rccl (5.4.3-1) UNRELEASED; urgency=medium
+rccl (5.4.3-1) unstable; urgency=medium
 
   * New upstream version 5.4.3
   * Update upstream URLs
-  * d/control: update maintainer name for consistency
+  * Update maintainer name for consistency with other packages
+  * d/rules: drop gfx1011 from build architectures.
+    The HIP runtime will fall back to using gfx1010.
+  * d/rules: use compressed DWARF5 debug symbols
 
- -- Cordell Bloor <cgmb@slerp.xyz>  Fri, 16 Feb 2024 11:35:47 -0700
+ -- Cordell Bloor <cgmb@slerp.xyz>  Fri, 16 Feb 2024 14:02:55 -0700
 
 rccl (5.3.3-3) unstable; urgency=medium
 
