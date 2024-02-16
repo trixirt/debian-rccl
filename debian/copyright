@@ -8,7 +8,7 @@ Copyright: 2019-2022, Advanced Micro Devices, Inc.
 License: BSD-3-Clause-Nvidia
 
 Files: debian/*
-Copyright: 2022-2023, Cordell Bloor <cgmb@slerp.xyz>
+Copyright: 2022-2024, Cordell Bloor <cgmb@slerp.xyz>
 License: Expat
 
 Files: .jenkins/*
@@ -36,8 +36,6 @@ Files: cmake/Dependencies.cmake
        cmake/git_version.cmake
 Copyright: 2019-2022, Advanced Micro Devices, Inc.
 License: Expat
-Comment: An Expat license header was added to git_version.cmake in
- https://github.com/ROCmSoftwarePlatform/rccl/commit/787f3521bea4c883685550708c997c458cacf819
 
 Files: src/include/BfdBacktrace.hpp
 Copyright: 2001-2014, Mellanox Technologies Ltd.
@@ -60,8 +58,7 @@ Copyright: 2021, Microsoft Corporation.
 License: Expat
 Comment: These files were contributed by Microsoft in
  https://github.com/ROCmSoftwarePlatform/rccl/pull/564
- but they lack a copyright header. However, they are also
- distributed as patches at https://github.com/microsoft/NPKit
+ They are also distributed as patches at https://github.com/microsoft/NPKit
  under the Expat license.
 
 Files: src/include/nvtx3/*
@@ -77,6 +74,18 @@ Files: src/clique/*
 Copyright: 2019-2022, Advanced Micro Devices, Inc.
 License: Expat
 
+Files: src/graph/connect.cc
+Copyright: 2016-2022, NVIDIA CORPORATION.
+           2019-2022, Advanced Micro Devices, Inc.
+           2004-2005, The Trustees of Indiana University and Indiana University Research and Technology Corporation
+           2004-2015, The University of Tennessee and The University of Tennessee Research Foundation
+           2004-2005, High Performance Computing Center Stuttgart, University of Stuttgart
+           2004-2005, The Regents of the University of California
+           2015, Research Organization for Information Science and Technology (RIST)
+License: BSD-3-Clause-Nvidia and BSD-3-clause
+Comment: Code for binary tree based on
+ https://github.com/open-mpi/ompi/blob/v5.0.2/ompi/mca/coll/base/coll_base_topo.c
+
 Files: tools/ib-test/*
        tools/rccl-prim-test/copy_kernel.h
        tools/topo_expl/include/*
@@ -87,6 +96,7 @@ License: BSD-3-Clause-Nvidia
 
 Files: tools/HelloRccl/HelloRccl.cpp
        tools/HelloRccl/HelloRccl.hpp
+       tools/GraphBench/GraphBench.cpp
        tools/TopoVisual/extract_topo.awk
        tools/TopoVisual/topo_visual.sh
        tools/TransferBench/*
