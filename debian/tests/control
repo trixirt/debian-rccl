@@ -1,0 +1,5 @@
+Test-Command: /bin/sh debian/tests/upstream-binaries librccl1-tests
+Depends: librccl1-tests, grep
+Restrictions: skippable, allow-stderr
+Architecture: amd64
+
