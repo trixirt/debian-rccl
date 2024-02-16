@@ -104,6 +104,7 @@ struct ncclTopoLinkList {
 #define RCCL_TOPO_GDR_ALL   4
 #define RCCL_TOPO_16P1H     8
 #define RCCL_TOPO_FORCE_INTRA 16
+#define RCCL_TOPO_XGMI_ALL  32
 
 #define RCCL_TOPO_MAX_RANKS_PER_GPU 8
 struct ncclTopoNode {
@@ -198,9 +199,20 @@ static ncclResult_t ncclTopoRankToIndex(struct ncclTopoSystem* system, int rank,
   for (int i=0; i<system->nodes[GPU].count; i++) {
     for (int j=0; j<system->nodes[GPU].nodes[i].gpu.nRanksPerGpu; j++ ) {
       if (system->nodes[GPU].nodes[i].gpu.rank[j] == rank) {
-	*index = i;
-	return ncclSuccess;
+	    *index = i;
+	    return ncclSuccess;
       }
+    }
+  }
+  return ncclInternalError;
+}
+
+static ncclResult_t ncclTopoDevToRank(struct ncclTopoSystem* system, int dev, int* rank) {
+  *rank = -1;
+  for (int i=0; i<system->nodes[GPU].count; i++) {
+    if (system->nodes[GPU].nodes[i].gpu.dev == dev) {
+      *rank = system->nodes[GPU].nodes[i].gpu.rank[0];
+      return ncclSuccess;
     }
   }
   return ncclInternalError;
@@ -212,6 +224,6 @@ static float ncclTopoXGMISpeed(int gcn) {
 }
 
 #define ncclGetKernelIndex(p_comm) \
-  (((p_comm)->topo->ll128Enabled ? 1 : 0)*2 + ((p_comm)->hostDevComm.collTraceThread ? 1 : 0))
+  (((p_comm)->topo->ll128Enabled ? 1 : 0)*2 + ((p_comm)->collTraceThread ? 1 : 0))
 
 #endif

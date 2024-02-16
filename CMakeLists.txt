@@ -34,12 +34,12 @@ set(CMAKE_INSTALL_PREFIX "${ROCM_PATH}" CACHE PATH "")
 #Set the AMDGPU_TARGETS with backward compatiblity
 if(COMMAND rocm_check_target_ids)
    rocm_check_target_ids(DEFAULT_AMDGPU_TARGETS
-       TARGETS "gfx803;gfx900:xnack-;gfx906:xnack-;gfx908:xnack-;gfx90a:xnack-;gfx90a:xnack+;gfx1030"
+       TARGETS "gfx803;gfx900:xnack-;gfx906:xnack-;gfx908:xnack-;gfx90a:xnack-;gfx90a:xnack+;gfx1030;gfx1100;gfx1101;gfx1102"
    )
 else()
     # Use target ID syntax if supported for AMDGPU_TARGETS
     if(TARGET_ID_SUPPORT)
-        set(DEFAULT_AMDGPU_TARGETS "gfx803;gfx900:xnack-;gfx906:xnack-;gfx908:xnack-;gfx1030")
+        set(DEFAULT_AMDGPU_TARGETS "gfx803;gfx900:xnack-;gfx906:xnack-;gfx908:xnack-;gfx1030;gfx1100;gfx1101;gfx1102")
     else()
         set(DEFAULT_AMDGPU_TARGETS "gfx803;gfx900;gfx906;gfx908")
     endif()
@@ -124,14 +124,6 @@ include_directories(src/include)
 include_directories(src/collectives)
 include_directories(src/collectives/device)
 
-# Create git version file
-# _git_version.cpp is a dummy output to force re-run prior to build
-ADD_CUSTOM_COMMAND(
-    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/git_version.cpp
-           ${CMAKE_CURRENT_BINARY_DIR}/_git_version.cpp
-    COMMAND ${CMAKE_COMMAND} -P
-            ${CMAKE_CURRENT_SOURCE_DIR}/cmake/git_version.cmake)
-
 if (BUILD_ALLREDUCE_ONLY)
   add_definitions(-DBUILD_ALLREDUCE_ONLY)
   set(CU_SOURCES
@@ -183,12 +175,6 @@ set(CC_SOURCES
     src/collectives/all_to_all_api.cc
     src/collectives/all_to_allv_api.cc
     src/channel.cc
-    #src/clique/CliqueManager.cc     # RCCL
-    #src/clique/HandleCache.cc       # RCCL
-    #src/clique/HandleShm.cc         # RCCL
-    #src/clique/Hash.cc              # RCCL
-    #src/clique/MsgQueue.cc          # RCCL
-    #src/clique/ShmObject.cc         # RCCL
     src/misc/argcheck.cc
     src/misc/nvmlwrap_stub.cc
     src/misc/utils.cc
@@ -201,6 +187,8 @@ set(CC_SOURCES
     src/misc/signals.cc              # RCCL
     src/misc/socket.cc
     src/misc/param.cc
+    src/misc/rocmwrap.cc
+    src/misc/strongstream.cc
     src/transport/coll_net.cc
     src/transport/net.cc
     src/transport/net_ib.cc
@@ -216,12 +204,25 @@ set(CC_SOURCES
     src/enqueue.cc
     ${CMAKE_CURRENT_BINARY_DIR}/git_version.cpp)
 
-
 foreach(filename ${CC_SOURCES})
   list(APPEND CPP_SOURCES ${filename})
 endforeach(filename)
 
 add_library(rccl ${CPP_SOURCES})
+
+# Create a custom target that creates/updates git_version.cpp
+# that executes whenever rccl is built
+add_custom_target(git_version_check
+  COMMENT "Updating git_version.cpp if necessary"
+  COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/git_version.cmake
+  VERBATIM
+)
+
+# Create a dummy git_version.cpp file in case it doesn't exist
+configure_file(src/nccl.h.in ${CMAKE_CURRENT_BINARY_DIR}/git_version.cpp)
+
+# Execute git_version_check whenever rccl library is built
+add_dependencies(rccl git_version_check)
 
 if(TRACE)
   add_definitions(-DENABLE_TRACE)
@@ -299,7 +300,7 @@ foreach(target ${AMDGPU_TARGETS})
 endforeach()
 
 if("${HIP_COMPILER}" MATCHES "clang")
-  target_compile_options(rccl PRIVATE -fvisibility=hidden)
+  target_compile_options(rccl PRIVATE -fvisibility=hidden --hipcc-func-supp)
   foreach(target ${AMDGPU_TARGETS})
     target_compile_options(rccl PRIVATE -fgpu-rdc)
   endforeach()
