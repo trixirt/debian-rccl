@@ -1,0 +1,11 @@
+Document: librccl-doc
+Title: RCCL Documentation
+Author: Advanced Micro Devices, Inc.
+Abstract: Documentation describing the design and use of the RCCL library.
+Section: Programming
+
+Format: HTML
+Index: /usr/share/doc/librccl-dev/html/index.html
+Files: /usr/share/doc/librccl-dev/html/*.html
+
+
