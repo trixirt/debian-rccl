@@ -5,7 +5,7 @@ Priority: optional
 Standards-Version: 4.6.2
 Vcs-Git: https://salsa.debian.org/rocm-team/rccl.git
 Vcs-Browser: https://salsa.debian.org/rocm-team/rccl
-Maintainer: ROCm Team <debian-ai@lists.debian.org>
+Maintainer: Debian ROCm Team <debian-ai@lists.debian.org>
 Uploaders: Cordell Bloor <cgmb@slerp.xyz>,
            Christian Kastner <ckk@debian.org>,
 Build-Depends: debhelper-compat (= 13),
