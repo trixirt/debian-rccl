@@ -1,3 +1,10 @@
+rccl (5.4.3-2~exp1) experimental; urgency=medium
+
+  * Add librccl1-tests package for autopkgtests
+  * Add librccl-doc package for documentation
+
+ -- Cordell Bloor <cgmb@slerp.xyz>  Fri, 16 Feb 2024 17:11:01 -0700
+
 rccl (5.4.3-1) unstable; urgency=medium
 
   * New upstream version 5.4.3
