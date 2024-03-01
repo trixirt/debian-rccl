@@ -22,10 +22,10 @@ endif
 %:
 	dh $@ -Scmake
 
-override_dh_auto_configure-arch:
+override_dh_auto_configure:
 	dh_auto_configure -- $(CMAKE_FLAGS)
 
-override_dh_auto_test-arch:
+override_dh_auto_test:
 ifeq (,$(filter nocheck,$(DEB_BUILD_OPTIONS)))
 	set -e \
 	; if [ -r /dev/kfd ] \
@@ -35,28 +35,13 @@ ifeq (,$(filter nocheck,$(DEB_BUILD_OPTIONS)))
 	; fi
 endif
 
-execute_before_dh_install-arch:
+execute_before_dh_install:
 	# Note the rpath field setting may cause reproducible build issues.
 	# This should be removed earlier in the toolchain if possible.
 	patchelf --remove-rpath ./debian/tmp/usr/lib/$(DEB_HOST_MULTIARCH)/librccl.so.1.0
 ifeq (,$(filter nocheck,$(DEB_BUILD_PROFILES)))
 	patchelf --remove-rpath ./debian/tmp/usr/bin/Unit-Tests
 endif
-
-override_dh_auto_configure-indep:
-	:
-
-override_dh_auto_build-indep:
-ifeq (,$(filter nodoc,$(DEB_BUILD_OPTIONS)))
-	cd docs; cp ../src/nccl.h.in nccl.h; doxygen
-	sphinx-build -b html docs/source html
-endif
-
-override_dh_auto_test-indep:
-	:
-
-override_dh_auto_install-indep:
-	:
 
 # dwz doesn't fully support DWARF-5 yet, see #1016936
 override_dh_dwz:
