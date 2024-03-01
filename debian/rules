@@ -11,6 +11,7 @@ CXXFLAGS := $(subst -fcf-protection,-Xarch_host -fcf-protection,$(CXXFLAGS))
 
 CMAKE_FLAGS = \
 	-DCMAKE_BUILD_TYPE=Release \
+	-DCMAKE_SKIP_RPATH=ON \
 	-DAMDGPU_TARGETS="gfx803;gfx900;gfx906;gfx908;gfx90a;gfx1010;gfx1030" \
 	-DROCM_SYMLINK_LIBS=OFF \
 	-DBUILD_FILE_REORG_BACKWARD_COMPATIBILITY=OFF
@@ -29,16 +30,19 @@ override_dh_auto_test:
 ifeq (,$(filter nocheck,$(DEB_BUILD_OPTIONS)))
 	set -e \
 	; if [ -r /dev/kfd ] \
-	; then RCCL_ENABLE_SIGNALHANDLER=1 NCCL_DEBUG=INFO HSA_FORCE_FINE_GRAIN_PCIE=1 obj-$(DEB_HOST_MULTIARCH)/test/UnitTests \
+	; then \
+	  LD_LIBRARY_PATH=obj-$(DEB_HOST_MULTIARCH) \
+	  RCCL_ENABLE_SIGNALHANDLER=1 \
+	  NCCL_DEBUG=INFO \
+	  HSA_FORCE_FINE_GRAIN_PCIE=1 \
+	  obj-$(DEB_HOST_MULTIARCH)/test/UnitTests \
 	; else echo "W: /dev/kfd unreadable: no available AMD GPU." \
 	;      echo "W: tests skipped." \
 	; fi
 endif
 
 execute_before_dh_install:
-	# Note the rpath field setting may cause reproducible build issues.
-	# This should be removed earlier in the toolchain if possible.
-	patchelf --remove-rpath ./debian/tmp/usr/lib/$(DEB_HOST_MULTIARCH)/librccl.so.1.0
+	:
 
 # dwz doesn't fully support DWARF-5 yet, see #1016936
 override_dh_dwz:
