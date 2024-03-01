@@ -50,21 +50,3 @@ Description: ROCm Communication Collectives Library - headers
  sockets and supports an arbitrary number of GPUs.
  .
  This package provides the RCCL development headers.
-
-Package: librccl1-tests
-Section: libdevel
-Architecture: amd64 arm64 ppc64el
-Depends: librccl1 (= ${binary:Version}), ${misc:Depends}, ${shlibs:Depends},
-Build-Profiles: <!nocheck>
-Description: ROCm Communication Collectives Library - tests
- RCCL (pronounced "Rickle") is a library of collective communication routines
- built on the AMD ROCm platform and optimized for discrete AMD GPUs. It
- implements routines such as all-reduce, all-gather, reduce, broadcast,
- reduce-scatter, gather, scatter and all-to-all. The library is optimized for
- high bandwidth over channels including PCIe, xGMI, InfiniBand Verbs or TCP/IP
- sockets and supports an arbitrary number of GPUs.
- .
- This package provides the RCCL test binaries used for verifying that the
- library is functioning correctly. These binaries are only used to check whether
- RCCL works correctly on a given GPU, so generally speaking, users probably
- don't need this package.
