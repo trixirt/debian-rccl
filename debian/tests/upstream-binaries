@@ -1,0 +1,52 @@
+#!/bin/sh
+# autopkgtest driver for ROCm upstream binaries
+#
+# Expects argument "$1" to be the name of a sub-directory, such that the
+# following following directory exists:
+#
+#   /usr/libexec/rocm/$1
+#
+# Will run rccl test executables in that directory, and exit with status=1 if
+# any failure occured, otherwise with status=0. A failure is defined as an
+# executable exiting with a status != 0.
+
+
+TESTSDIR="/usr/libexec/rocm/$1"
+
+if [ ! -e /dev/kfd ]
+then
+	echo "/dev/kfd not present, system either lacks AMD GPU or AMDGPU driver is not loaded."
+	echo "Skipping tests."
+	# Magic number to signal 'skipped'
+	exit 77
+elif [ "`id -u`" != "0" ] && [ ! -r /dev/kfd ]
+then
+	echo "/dev/kfd present but no read permission."
+	echo "Skipping tests."
+	exit 77
+fi
+
+gpu_count="$(grep 'gfx_target_version [^0]' /sys/devices/virtual/kfd/kfd/topology/nodes/*/properties | wc -l)"
+if [ "$gpu_count" -lt 2 ]
+then
+	echo "The rccl tests require at least two GPUs."
+	echo "Skipping tests."
+	exit 77
+elif [ -z "$1" ]
+then
+	echo "This script needs to be called with a directory name as an argument." >&2
+	echo "Aborting." >&2
+	exit 1
+elif [ ! -d "$TESTSDIR" ]
+then
+	echo "The directory $TESTSDIR does not exist." >&2
+	echo "Aborting." >&2
+	exit 1
+fi
+
+cd "$AUTOPKGTEST_TMP"
+
+# Any individual failure is overall failure
+EXITCODE=0
+RCCL_ENABLE_SIGNALHANDLER=1 NCCL_DEBUG=INFO HSA_FORCE_FINE_GRAIN_PCIE=1 $TESTSDIR/UnitTests --gtest_filter="-*ManagedMem" || EXITCODE=1
+exit $EXITCODE
