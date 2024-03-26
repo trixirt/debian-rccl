@@ -1,7 +1,11 @@
 rccl (5.4.3-3~exp1) experimental; urgency=medium
 
+  [ Cordell Bloor ]
   * Add librccl1-tests package for autopkgtests
   * Add librccl-doc package for documentation
+
+  [ Christian Kastner ]
+  * Add d/gbp.conf to enforce use of pristine-tar
 
  -- Cordell Bloor <cgmb@slerp.xyz>  Tue, 12 Mar 2024 11:33:40 -0600
 
