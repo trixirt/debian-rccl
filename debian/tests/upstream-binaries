@@ -32,6 +32,11 @@ then
 	echo "The rccl tests require at least two GPUs."
 	echo "Skipping tests."
 	exit 77
+elif [ ! -f /sys/module/amdgpu/parameters/pcie_p2p ] || [ "Y" != "$(cat /sys/module/amdgpu/parameters/pcie_p2p)" ]
+then
+	echo "The rccl tests require AMDGPU P2P."
+	echo "Skipping tests."
+	exit 77
 elif [ -z "$1" ]
 then
 	echo "This script needs to be called with a directory name as an argument." >&2
