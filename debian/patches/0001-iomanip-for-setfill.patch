@@ -1,0 +1,24 @@
+From 50afb93542f3e68e125d0b07238da0fed624b612 Mon Sep 17 00:00:00 2001
+From: Tom Rix <Tom.Rix@amd.com>
+Date: Thu, 17 Oct 2024 19:52:07 +0000
+Subject: [PATCH] iomanip for setfill
+
+---
+ test/common/TestBedChild.hpp | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/test/common/TestBedChild.hpp b/test/common/TestBedChild.hpp
+index 9e94c09b25df..16ea18216f1a 100644
+--- a/test/common/TestBedChild.hpp
++++ b/test/common/TestBedChild.hpp
+@@ -6,6 +6,7 @@
+ 
+ #pragma once
+ 
++#include <iomanip>
+ #include <vector>
+ #include <unistd.h>
+ #include "CollectiveArgs.hpp"
+-- 
+2.45.2
+
