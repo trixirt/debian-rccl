@@ -10,7 +10,11 @@
 
 namespace {
   template<typename T, typename RedOp, typename Proto>
+#if defined(USE_INDIRECT_FUNCTION_CALL) && !defined(__gfx940__) && !defined(__gfx941__) && !defined(__gfx942__)
+  __device__ void runRing(ncclWorkElem *args) {
+#else
   __device__ __attribute__((noinline)) void runRing(ncclWorkElem *args) {
+#endif
     const int tid = threadIdx.x;
     const int nthreads = args->nWarps*WARP_SIZE;
     const int bid = args->bid;
@@ -38,7 +42,7 @@ namespace {
 
 #if defined(ENABLE_NPKIT) && defined(ENABLE_NPKIT_EVENT_TIME_SYNC_GPU)
     if (tid == 0) {
-      NpKit::CollectGpuEvent(NPKIT_EVENT_TIME_SYNC_GPU, 0, 0, __builtin_amdgcn_s_memrealtime(),
+      NpKit::CollectGpuEvent(NPKIT_EVENT_TIME_SYNC_GPU, 0, 0, NPKIT_GET_GPU_TIMESTAMP(),
           ncclShmem.comm.npKitEventCollectContexts + npKitCtxIdx);
     }
 #endif
@@ -46,7 +50,7 @@ namespace {
     T *inputBuf = (T*)args->sendbuff;
     T *outputBuf = (T*)args->recvbuff;
     Primitives<T, RedOp, FanSymmetric<1>, 0, Proto, 0>
-      prims(tid, nthreads, &ring->prev, &ring->next, inputBuf, outputBuf, args->redOpArg, args->connIndex << 16);
+      prims(tid, nthreads, &ring->prev, &ring->next, inputBuf, outputBuf, args->redOpArg, 0, args->connIndex, args->connIndex);
 
 #if defined(ENABLE_NPKIT)
     if (tid == 0) {

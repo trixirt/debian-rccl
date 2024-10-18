@@ -1,14 +1,11 @@
 # Copyright (c) 2019-2021 Advanced Micro Devices, Inc. All rights reserved.
+# Modifications Copyright (c) Microsoft Corporation. Licensed under the MIT License.
+
 cmake_minimum_required(VERSION 2.8.12)
 
 if(BUILD_TESTS)
 
-  message("Building unit tests (Installed in /test/UnitTests)")
-
-  find_program(CHRPATH chrpath)
-  if(NOT CHRPATH)
-      message(FATAL_ERROR "chrpath is required for UnitTests. Please install (e.g. sudo apt-get install chrpath)")
-  endif()
+  message("Building rccl unit tests (Installed in /test/rccl-UnitTests)")
 
   find_package(hsa-runtime64 PATHS /opt/rocm )
   if(${hsa-runtime64_FOUND})
@@ -19,7 +16,7 @@ if(BUILD_TESTS)
     message("Looking for library files in ${ROCR_LIB_DIR}")
 
     # Search for ROCr header file in user defined locations
-    find_path(ROCR_HDR hsa.h PATHS ${ROCR_INC_DIR} "/opt/rocm" PATH_SUFFIXES include/hsa REQUIRED)
+    find_path(ROCR_HDR hsa/hsa.h PATHS ${ROCR_INC_DIR} "/opt/rocm" PATH_SUFFIXES include REQUIRED)
     INCLUDE_DIRECTORIES(${ROCR_HDR})
 
     # Search for ROCr library file in user defined locations
@@ -42,81 +39,45 @@ if(BUILD_TESTS)
   # Collect source files for tests
   if(BUILD_ALLREDUCE_ONLY)
     set(TEST_SOURCE_FILES
-      AllReduce_Clique.cpp
-      AllReduce_GroupCall.cpp
-      AllReduce_InPlace.cpp
-      AllReduce_ManagedMem.cpp
-      AllReduce_OutOfPlace.cpp
-      AllReduce_PreMultScalar.cpp
+      AllReduce_Tests.cpp
     )
   else()
     set(TEST_SOURCE_FILES
-      #AllReduce
-      AllReduce_Clique.cpp
-      AllReduce_GroupCall.cpp
-      AllReduce_InPlace.cpp
-      AllReduce_ManagedMem.cpp
-      AllReduce_OutOfPlace.cpp
-      AllReduce_PreMultScalar.cpp
-      #AllGather
-      AllGather_InPlace.cpp
-      AllGather_ManagedMem.cpp
-      AllGather_OutOfPlace.cpp
-      #AllToAll
-      AllToAll_OutOfPlace.cpp
-      AllToAll_ManagedMem.cpp
-      #AllToAllv
-      AllToAllv_OutOfPlace.cpp
-      #Broadcast
-      Broadcast_InPlace.cpp
-      Broadcast_ManagedMem.cpp
-      Broadcast_OutOfPlace.cpp
-      #Reduce
-      Reduce_InPlace.cpp
-      Reduce_ManagedMem.cpp
-      Reduce_OutOfPlace.cpp
-      #ReduceScatter
-      ReduceScatter_InPlace.cpp
-      ReduceScatter_ManagedMem.cpp
-      ReduceScatter_OutOfPlace.cpp
-      #Scatter
-      Scatter_InPlace.cpp
-      Scatter_ManagedMem.cpp
-      Scatter_OutOfPlace.cpp
-      #Gather
-      Gather_InPlace.cpp
-      Gather_ManagedMem.cpp
-      Gather_OutOfPlace.cpp
-      #SendRecv
-      SendRecv_SinglePairs.cpp
+      AllGatherTests.cpp
+      AllReduceTests.cpp
+      AllToAllTests.cpp
+      AllToAllVTests.cpp
+      BroadcastTests.cpp
+      GatherTests.cpp
+      GroupCallTests.cpp
+      NonBlockingTests.cpp
+      ReduceScatterTests.cpp
+      ReduceTests.cpp
+      ScatterTests.cpp
+      SendRecvTests.cpp
+      StandaloneTests.cpp
       )
   endif()
 
-  add_executable(UnitTests ${COMMON_SOURCE_FILES} ${TEST_SOURCE_FILES})
-  target_include_directories(UnitTests PRIVATE ${ROCM_PATH} ${GTEST_INCLUDE_DIRS})
-  target_link_libraries(UnitTests PRIVATE ${GTEST_BOTH_LIBRARIES})
-  target_link_libraries(UnitTests PRIVATE hip::host hip::device hsa-runtime64::hsa-runtime64)
+  add_executable(rccl-UnitTests ${COMMON_SOURCE_FILES} ${TEST_SOURCE_FILES})
+  target_include_directories(rccl-UnitTests PRIVATE ${ROCM_PATH} ${GTEST_INCLUDE_DIRS})
+  target_include_directories(rccl-UnitTests PRIVATE ${PROJECT_BINARY_DIR}/include)        # for generated rccl.h header
+  target_include_directories(rccl-UnitTests PRIVATE ${PROJECT_BINARY_DIR}/hipify/src/include) # for rccl_bfloat16.h
+  target_link_libraries(rccl-UnitTests PRIVATE ${GTEST_BOTH_LIBRARIES})
+  target_link_libraries(rccl-UnitTests PRIVATE hip::host hip::device hsa-runtime64::hsa-runtime64)
+  target_link_libraries(rccl-UnitTests PRIVATE Threads::Threads)
 
-  # UnitTests using static library of rccl requires passing rccl
+  # rccl-UnitTests using static library of rccl requires passing rccl
   # through -l and -L instead of command line input.
   if(BUILD_STATIC)
-    add_dependencies(UnitTests rccl)
-    target_link_libraries(UnitTests PRIVATE dl rt numa -lrccl -L${CMAKE_BINARY_DIR} -lrocm_smi64 -L${ROCM_PATH}/rocm_smi/lib)
+    add_dependencies(rccl-UnitTests rccl)
+    target_link_libraries(rccl-UnitTests PRIVATE dl rt numa -lrccl -L${CMAKE_BINARY_DIR} -lrocm_smi64 -L${ROCM_PATH}/lib -L${ROCM_PATH}/rocm_smi/lib)
   else()
-    target_link_libraries(UnitTests PRIVATE rccl)
+    target_link_libraries(rccl-UnitTests PRIVATE rccl)
   endif()
-  # HIPCC adds /opt/rocm/lib as RPATH, even though the install process is supposed to
-  # remove RPATH.  It also occurs before any user-specified rpath, which effectively overrides the user rpath.
-  #  As a work-around, set the correct RPATH for the unit test executable as a post-install step
-  # if (CMAKE_INSTALL_PREFIX MATCHES "${ROCM_PATH}")
-  #   # install_prefix/CMAKE_INSTALL_PREFIX was not explicitly specified, so look in build/release
-  #   add_custom_command( TARGET UnitTests POST_BUILD COMMAND chrpath ARGS -r ${CMAKE_BINARY_DIR}:${ROCM_PATH}/lib ${CMAKE_BINARY_DIR}/test/UnitTests)
-  # else()
-  #   add_custom_command( TARGET UnitTests POST_BUILD COMMAND chrpath ARGS -r ${CMAKE_INSTALL_PREFIX}/lib:${ROCM_PATH}/lib ${CMAKE_INSTALL_PREFIX}/test/UnitTests)
-  # endif()
-  set_property(TARGET UnitTests PROPERTY INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib;${ROCM_PATH}/lib;${CMAKE_BINARY_DIR}")
-  set_property(TARGET UnitTests PROPERTY BUILD_RPATH "${CMAKE_BINARY_DIR};${ROCM_PATH}/lib")
-  rocm_install(TARGETS UnitTests COMPONENT tests)
+  set_property(TARGET rccl-UnitTests PROPERTY INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib;${ROCM_PATH}/lib;${CMAKE_BINARY_DIR}")
+  set_property(TARGET rccl-UnitTests PROPERTY BUILD_RPATH "${CMAKE_BINARY_DIR};${ROCM_PATH}/lib")
+  rocm_install(TARGETS rccl-UnitTests COMPONENT tests)
 else()
-  message("Not building unit tests")
+  message("Not building rccl unit tests")
 endif()

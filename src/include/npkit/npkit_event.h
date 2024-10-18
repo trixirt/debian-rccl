@@ -100,4 +100,31 @@
 
 #define NPKIT_PRIM_COLLECT_DATA_PROCESS_TIME                    0x4F
 
+#define NPKIT_EVENT_ALL_GATHER_RING_ENTRY                       0x50
+#define NPKIT_EVENT_ALL_GATHER_RING_EXIT                        0x51
+#define NPKIT_EVENT_ALL_GATHER_RING_SEND_ENTRY                  0x52
+#define NPKIT_EVENT_ALL_GATHER_RING_SEND_EXIT                   0x53
+#define NPKIT_EVENT_ALL_GATHER_RING_RECV_COPY_SEND_ENTRY        0x54
+#define NPKIT_EVENT_ALL_GATHER_RING_RECV_COPY_SEND_EXIT         0x55
+#define NPKIT_EVENT_ALL_GATHER_RING_DIRECT_RECV_ENTRY           0x56
+#define NPKIT_EVENT_ALL_GATHER_RING_DIRECT_RECV_EXIT            0x57
+
+#define NPKIT_EVENT_NET_TEST_ENTRY                              0x58
+#define NPKIT_EVENT_NET_TEST_EXIT                               0x59
+
+#define NPKIT_EVENT_MSCCL_GENERIC_OP_ENTRY                      0x5A
+#define NPKIT_EVENT_MSCCL_GENERIC_OP_EXIT                       0x5B
+#define NPKIT_EVENT_MSCCL_REDUCE_ENTRY                          0x5C
+#define NPKIT_EVENT_MSCCL_REDUCE_EXIT                           0x5D
+#define NPKIT_EVENT_MSCCL_SEND_ENTRY                          	0x5E
+#define NPKIT_EVENT_MSCCL_SEND_EXIT                           	0x5F
+#define NPKIT_EVENT_MSCCL_RECV_ENTRY                            0x60
+#define NPKIT_EVENT_MSCCL_RECV_EXIT                             0x61
+#define NPKIT_EVENT_MSCCL_RUN_ENTRY                             0x62
+#define NPKIT_EVENT_MSCCL_RUN_EXIT                              0x63
+#define NPKIT_EVENT_MSCCL_RECV_REDUCE_COPY_ENTRY                0x64
+#define NPKIT_EVENT_MSCCL_RECV_REDUCE_COPY_EXIT                 0x65
+#define NPKIT_EVENT_MSCCL_INIT_ENTRY                            0x66
+#define NPKIT_EVENT_MSCCL_INIT_EXIT                             0x67
+
 #endif

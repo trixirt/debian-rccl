@@ -23,7 +23,10 @@ typedef enum : uint8_t {
   ncclPatternTreeUp,
   ncclPatternTreeDown,
   ncclPatternTreeUpDown,
-  ncclPatternCollTreeUpDown,
+  ncclPatternCollnetChain,
+  ncclPatternCollnetDirect,
+  ncclPatternNvls,
+  ncclPatternNvlsTree,
   ncclPatternSend,
   ncclPatternRecv
 } ncclPattern_t;
@@ -40,7 +43,7 @@ struct ncclInfo {
   ncclRedOp_t op;
   int root; // peer for p2p operations
   ncclComm_t comm;
-  hipStream_t stream;
+  cudaStream_t stream;
   // Algorithm details
   int chunkSteps;
   int sliceSteps;
@@ -90,9 +93,8 @@ struct ncclTaskP2p {
 
 struct ncclCudaStreamList {
   struct ncclCudaStreamList *next;
-  hipStream_t stream;
+  cudaStream_t stream;
 };
-
 struct ncclTasks {
   struct Peer {
     bool sendSeen, recvSeen;
@@ -102,7 +104,8 @@ struct ncclTasks {
   struct ncclIntruQueue<ncclTaskColl, &ncclTaskColl::next> collQueue;
   size_t collBytesTotal;
   struct Peer* peers/*[nRanks]*/;
-  int *p2pSendOrder/*[nRanks]*/, *p2pRecvOrder/*[nRanks]*/;
+  int *p2pSendOrder, *p2pRecvOrder;
+  int p2pOrderSteps;
   int nTasksColl, nTasksP2p;
 
   // The list of user streams aggregated over all tasks present.
@@ -110,7 +113,7 @@ struct ncclTasks {
   // Keep track of the number of user streams
   int numStreams;
   // The most recent user stream. Ignored if streams==nullptr
-  hipStream_t streamRecent;
+  cudaStream_t streamRecent;
   // The graph capturing all user streams or invalid if none. Thus we restrict the
   // user that all streams must be captured in the same graph or not captured
   // at all. Technically we could probably relax this, but that would mean

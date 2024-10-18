@@ -1,6 +1,7 @@
 /*************************************************************************
  * Copyright (c) 2016-2022, NVIDIA CORPORATION. All rights reserved.
  * Modifications Copyright (c) 2019-2022 Advanced Micro Devices, Inc. All rights reserved.
+ * Modifications Copyright (c) Microsoft Corporation. Licensed under the MIT License.
  *
  * See LICENSE.txt for license information
  ************************************************************************/
@@ -10,6 +11,14 @@
 #endif
 
 #define NCCL_LL128_FLAGTHREAD (NCCL_LL128_LINEELEMS-1)
+
+#ifndef RCCL_USE_WBINVL1_VOL
+#if defined(__GFX8__) || defined(__GFX9__)
+#define RCCL_USE_WBINVL1_VOL 1
+#else
+#define RCCL_USE_WBINVL1_VOL 0
+#endif
+#endif
 
 template<typename T, typename RedOp, typename Fan, int Direct, int P2p>
 class Primitives<T, RedOp, Fan, Direct, ProtoLL128, P2p>:
@@ -23,6 +32,7 @@ class Primitives<T, RedOp, Fan, Direct, ProtoLL128, P2p>:
   const int wid;
   const int stepSize;
   const int warp;
+  const int warpInBlock; // warp index in thread block
   const bool flagThread;
   const int group;
   Fan fan;
@@ -236,7 +246,8 @@ private:
           vr[u+1] = __builtin_nontemporal_load(ptr+u*WARP_SIZE+1);
           needReload |= flagThread && (vr[u+1] != flag);
         }
-      } while (__any(needReload) && checkAbort(spins, 0, 0) == 0);
+        needReload &= (0 == checkAbort(spins, 0, 0));
+      } while (__any(needReload));
     }
 
     /************* Finish register load **************/
@@ -247,9 +258,9 @@ private:
       if (SrcBuf == Input) {
         #pragma unroll
         for (int u=0; u<ELEMS_PER_THREAD; u+=2) {
-          v[u] = MULTI<RedOp, T>().preOp(redOp, v[u]);
+          v[u] = applyPreOp(redOp, v[u]);
           if (!flagThread)
-            v[u+1] = MULTI<RedOp, T>().preOp(redOp, v[u+1]);
+            v[u+1] = applyPreOp(redOp, v[u+1]);
         }
       }
     }
@@ -260,8 +271,8 @@ private:
         uint64_t* ptr = recvPtr(0)+ll128Offset;
         #pragma unroll
         for (int u=0; u<ELEMS_PER_THREAD; u+=2) {
-          v[u] = SRC ? MULTI<RedOp, T>()(redOp, vr[u], v[u]) : vr[u];
-          v[u+1] = SRC ? MULTI<RedOp, T>()(redOp, vr[u+1], v[u+1]) : vr[u+1];
+          v[u]   = SRC ? applyReduce(redOp, vr[u], v[u]) : vr[u];
+          v[u+1] = SRC ? applyReduce(redOp, vr[u+1], v[u+1]) : vr[u+1];
         }
       }
 
@@ -278,27 +289,28 @@ private:
             vr[u+1] = __builtin_nontemporal_load(ptr+u*WARP_SIZE+1);
             needReload |= flagThread && (vr[u+1] != flag);
           }
-        } while (__any(needReload) && checkAbort(spins, i, 0) == 0);
+          needReload &= (0 == checkAbort(spins, i, 0));
+        } while (__any(needReload));
 
         #pragma unroll
         for (int u=0; u<ELEMS_PER_THREAD; u+=2) {
-          v[u] = MULTI<RedOp, T>()(redOp, vr[u], v[u]);
-          v[u+1] = MULTI<RedOp, T>()(redOp, vr[u+1], v[u+1]);
+          v[u]   = applyReduce(redOp, vr[u], v[u]);
+          v[u+1] = applyReduce(redOp, vr[u+1], v[u+1]);
         }
       }
     }
     /********************** End Recv ************************/
 
-    if (postOp && !FuncTraits<RedOp>::IsPostOpIdentity) {
+    if (postOp) {
       #pragma unroll
       for (int u=0; u<ELEMS_PER_THREAD; u+=2) {
-        v[u]   = MULTI<RedOp, T>().postOp(redOp, v[u]);
-        v[u+1] = MULTI<RedOp, T>().postOp(redOp, v[u+1]);
+        v[u]   = applyPostOp(redOp, v[u]);
+        v[u+1] = applyPostOp(redOp, v[u+1]);
       }
     }
 
-#if !defined(__gfx1030__) && !defined(__gfx1100__) && !defined(__gfx1101__) && !defined(__gfx1102__)
-    if (tid == 0) __asm__ __volatile__("buffer_wbinvl1_vol");
+#if RCCL_USE_WBINVL1_VOL
+    if (tid == 0) __builtin_amdgcn_buffer_wbinvl1();
 #endif
     /************************ Send **************************/
     if (SEND) {
@@ -329,14 +341,6 @@ private:
   __device__ __forceinline__ void GenericOp(intptr_t srcIx, intptr_t dstIx, int nelem, bool postOp) {
     constexpr int SRC = SrcBuf != -1 ? 1 : 0;
     constexpr int DST = DstBuf != -1 ? 1 : 0;
-    static_assert(-1<=SrcBuf && SrcBuf < 2, "Uhoh");
-    static_assert(-1<=DstBuf && DstBuf < 2, "Uhoh");
-    static_assert(DstBuf!=Input, "Mistake?");
-    #if 0
-    assert((SrcBuf==-1) == (srcIx==-1));
-    assert((DstBuf==-1) == (dstIx==-1));
-    #endif
-
     T const *srcPtr = SrcBuf == -1 ? nullptr : userBufs[SrcBuf] + srcIx;
     T       *dstPtr = DstBuf == -1 ? nullptr : userBufs[DstBuf] + dstIx;
     int wireOffset = WireWordPerSlice*warp + 2*wid;
@@ -366,6 +370,99 @@ private:
     if (SEND) postSend();
     if (RECV) for (int i=0; i < MaxRecv; i++) recvStep[i] += 1;
     if (RECV) postRecv();
+  }
+
+  template <int REDUCE, int COPY, int MULTISRCS, int MULTIDSTS>
+  __device__ __forceinline__ void mscclGenericOp(T** srcs, int nsrcs, T** dsts, int ndsts, int nelem) {
+#if defined(ENABLE_NPKIT) && defined(ENABLE_NPKIT_EVENT_MSCCL_GENERIC_OP_ENTRY)
+    if (tid == 0) {
+      NpKit::CollectGpuEvent(NPKIT_EVENT_MSCCL_GENERIC_OP_ENTRY, nelem*sizeof(T), 0, NPKIT_GET_GPU_TIMESTAMP(),
+          ncclShmem.comm.npKitEventCollectContexts + npKitCtxIdx);
+    }
+#endif
+
+    T const *srcPtr = srcs[0];
+    T       *dstPtr = dsts[0];
+    int wireOffset = WireWordPerSlice*warp + 2*wid;
+    const int nwarps = nthreads/WARP_SIZE;
+    nelem = nelem < 0 ? 0 : nelem;
+
+    nelem -= DataEltPerSlice*warp;
+    srcPtr += DataEltPerSlice*warp;
+    dstPtr += DataEltPerSlice*warp;
+    if (MULTISRCS){
+      for (int i = 1; i < nsrcs; i++){
+        srcs[i] += DataEltPerSlice*warp;
+      }
+    }
+    if (MULTIDSTS){
+      for (int i = 1; i < ndsts; i++){
+        dsts[i] += DataEltPerSlice*warp;
+      }
+    }
+    while (nelem > 0) {
+      const int eltInSlice = min(nelem, DataEltPerSlice);
+      uint64_t regs[NCCL_LL128_SHMEM_ELEMS_PER_THREAD];
+      loadRegsBegin(regs, srcPtr, eltInSlice);
+      loadRegsFinish(regs);
+      if (REDUCE){
+        uint64_t regsD[NCCL_LL128_SHMEM_ELEMS_PER_THREAD];
+        loadRegsBegin(regsD, dstPtr, eltInSlice);
+        loadRegsFinish(regsD);
+        #pragma unroll
+        for (int u=0; u<NCCL_LL128_SHMEM_ELEMS_PER_THREAD; u+=2) {
+          regsD[u] = applyReduce(redOp, regs[u], regsD[u]);
+          if (!flagThread)
+            regsD[u+1] = applyReduce(redOp, regs[u+1], regsD[u+1]);
+        }
+        if (MULTISRCS){
+          for (int i = 1; i < nsrcs; i++){
+            loadRegsBegin(regs, srcs[i], eltInSlice);
+            loadRegsFinish(regs);
+            for (int u=0; u<NCCL_LL128_SHMEM_ELEMS_PER_THREAD; u+=2) {
+              regsD[u] = applyReduce(redOp, regs[u], regsD[u]);
+              if (!flagThread)
+                regsD[u+1] = applyReduce(redOp, regs[u+1], regsD[u+1]);
+            }
+          }
+        }
+        storeRegs(dstPtr, regsD, eltInSlice);
+      }
+      if (COPY){
+        storeRegs(dstPtr, regs, eltInSlice);
+        if (MULTIDSTS){
+          for (int i = 1; i < nsrcs; i++){
+            loadRegsBegin(regs, srcs[i], eltInSlice);
+            loadRegsFinish(regs);
+            storeRegs(dsts[i], regs, eltInSlice);
+          }
+        }
+      }
+
+      wireOffset += WireWordPerSlice*nwarps;
+      srcPtr += DataEltPerSlice*nwarps;
+      dstPtr += DataEltPerSlice*nwarps;
+      if (MULTISRCS){
+        for (int i = 1; i < nsrcs; i++){
+          srcs[i] += DataEltPerSlice*nwarps;
+        }
+      }
+      if (MULTIDSTS){
+        for (int i = 1; i < ndsts; i++){
+          dsts[i] += DataEltPerSlice*nwarps;
+        }
+      }
+      nelem -= DataEltPerSlice*nwarps;
+    }
+
+#if defined(ENABLE_NPKIT) && defined(ENABLE_NPKIT_EVENT_MSCCL_GENERIC_OP_EXIT)
+    if (tid == 0) {
+      NpKit::CollectGpuEvent(NPKIT_EVENT_MSCCL_GENERIC_OP_EXIT, nelem*sizeof(T), 0, NPKIT_GET_GPU_TIMESTAMP(),
+          ncclShmem.comm.npKitEventCollectContexts + npKitCtxIdx);
+    }
+#endif
+
+    barrier();
   }
 
   __device__ __forceinline__ void loadRecvConn(struct ncclConnInfo* conn, int i) {
@@ -403,23 +500,24 @@ private:
 public:
   __device__ Primitives(
       const int tid, const int nthreads, int const *recvPeers, int const *sendPeers,
-      void const *inputBuf, void *outputBuf, uint64_t redOpArg, int group=0
+      void const *inputBuf, void *outputBuf, uint64_t redOpArg, uint8_t group=0,
+      uint8_t connIndexRecv=0, uint8_t connIndexSend=0
     ):
     redOp(redOpArg),
     tid(tid), nthreads(nthreads), wid(tid%WARP_SIZE), warp(tid/WARP_SIZE),
-    flagThread((tid%4)==3), group(group&(uint16_t)0xFFFF),
+    warpInBlock(threadIdx.x/WARP_SIZE),
+    flagThread((tid%4)==3), group(group),
     stepSize(ncclShmem.comm.buffSizes[NCCL_PROTO_LL128]/NCCL_STEPS/sizeof(uint64_t)) {
-    barriers = &ncclShmem.groups[this->group].barrier;
-    barrier_next = ncclShmem.groups[this->group].barrier_next;
-
     auto *channel = &ncclShmem.channel;
+    barriers = &ncclShmem.groups[group].barrier;
+    barrier_next = ncclShmem.groups[group].barrier_next;
     int nrecv=0, nsend=0;
     while (nrecv < MaxRecv && recvPeers[nrecv] >= 0) {
-      loadRecvConn(&channel->peers[recvPeers[nrecv]].recv[0], nrecv);
+      loadRecvConn(&channel->peers[recvPeers[nrecv]]->recv[connIndexRecv], nrecv);
       nrecv++;
     }
     while (nsend < MaxSend && sendPeers[nsend] >= 0) {
-      loadSendConn(&channel->peers[sendPeers[nsend]].send[0], nsend);
+      loadSendConn(&channel->peers[sendPeers[nsend]]->send[connIndexSend], nsend);
       nsend++;
     }
     this->fan = Fan(nrecv, nsend);
@@ -474,5 +572,20 @@ public:
   }
   __device__ void recvSend(int eltN) {
     return GenericOp<1, 1, -1, -1>(-1, -1, eltN, false);
+  }
+
+  // MSCCL primitives
+  __device__ void sendWithBarrier(intptr_t inpIx, int eltN) {
+    send(inpIx, eltN);
+  }
+  __device__ void localCopy(T* srcs, T* dsts, int eltN) {
+    return mscclGenericOp<0,1,0,0>(&srcs, 1, &dsts, 1, eltN);
+  }
+  __device__ void reduce(T** srcs, int nsrcs, T** dsts, int ndsts, int eltN) {
+    if (nsrcs == 1) {
+      return mscclGenericOp<1,0,0,0>(srcs, 1, dsts, 1, eltN);
+    } else {
+      return mscclGenericOp<1,0,1,0>(srcs, nsrcs, dsts, 1, eltN);
+    }
   }
 };

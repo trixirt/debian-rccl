@@ -1,6 +1,6 @@
 /*************************************************************************
  * Copyright (c) 2016-2022, NVIDIA CORPORATION. All rights reserved.
- * Modifications Copyright (c) 2019-2022 Advanced Micro Devices, Inc. All rights reserved.
+ * Modifications Copyright (c) 2019-2023 Advanced Micro Devices, Inc. All rights reserved.
  *
  * See LICENSE.txt for license information
  ************************************************************************/
@@ -10,26 +10,30 @@
 
 #include "graph.h"
 #include "core.h"
+#include "archinfo.h"
+#include <string.h>
 
-#define LOC_WIDTH 5000.0
-#define SM60_NVLINK_WIDTH 18.0
-#define SM70_NVLINK_WIDTH 22.0
-#define SM80_NVLINK_WIDTH 22.0
-#define SM86_NVLINK_WIDTH 12.0
-#define PCI_WIDTH 12.0           // PCI Gen3 x16
-#define QPI_WIDTH 6.0
-#define SKL_QPI_WIDTH 9.0
-#define ZPI_WIDTH 6.0
-#define YONGFENG_ZPI_WIDTH 9.0
-#define P9_WIDTH 32.0
-#define ARM_WIDTH 6.0
-#define NET_WIDTH 12.0           // 100Gbit
+#define LOC_BW 5000.0
+#define SM60_NVLINK_BW 18.0
+#define SM70_NVLINK_BW 20.0
+#define SM80_NVLINK_BW 20.0
+#define SM90_NVLINK_BW 20.0
+#define SM86_NVLINK_BW 12.0
+#define PCI_BW 12.0           // PCI Gen3 x16
+#define QPI_BW 6.0
+#define SKL_QPI_BW 10.0
+#define ZPI_BW 6.0
+#define YONGFENG_ZPI_BW 9.0
+#define P9_BW 32.0
+#define ARM_BW 6.0
+#define NET_BW 12.0           // 100Gbit
 #define VEGA_XGMI_WIDTH 24.0
 #define MI200_XGMI_WIDTH 36.0
+#define GFX94X_XGMI_WIDTH 48.0
 
 // Intel CPU convert GPU P2P traffic into 64B PCI TLPs, so GPU
 // to GPU traffic consumes more PCI bandwidth.
-#define INTEL_P2P_OVERHEAD(speed) (speed*6/5)
+#define INTEL_P2P_OVERHEAD(bw) (bw*6/5)
 
 #define NCCL_TOPO_NODE_TYPES 7
 #define GPU 0
@@ -75,13 +79,18 @@ extern const char* topoLinkTypeStr[];
 
 // Connection traversing PCIe as well as the SMP interconnect between NUMA nodes (e.g., QPI/UPI)
 #define PATH_SYS 7
-#define PATH_DIS 7
+
+// Connection through the network
+#define PATH_NET 8
+
+// Disconnected
+#define PATH_DIS 9
 extern const char* topoPathTypeStr[];
 
 struct ncclTopoNode;
 struct ncclTopoLink {
   int type;
-  float width;
+  float bw;
   struct ncclTopoNode* remNode;
 };
 #define NCCL_TOPO_MAX_LINKS 32
@@ -90,7 +99,7 @@ struct ncclTopoLink {
 struct ncclTopoLinkList {
   struct ncclTopoLink* list[NCCL_TOPO_MAX_HOPS];
   int count;
-  float width;
+  float bw;
   int type;
 };
 
@@ -106,7 +115,6 @@ struct ncclTopoLinkList {
 #define RCCL_TOPO_FORCE_INTRA 16
 #define RCCL_TOPO_XGMI_ALL  32
 
-#define RCCL_TOPO_MAX_RANKS_PER_GPU 8
 struct ncclTopoNode {
   int type;
   int64_t id;
@@ -114,17 +122,16 @@ struct ncclTopoNode {
   union {
     struct {
       int dev; // NVML dev number
-      int rank[RCCL_TOPO_MAX_RANKS_PER_GPU];
-      int nRanksPerGpu;
+      int rank;
       int cudaCompCap;
       int gdrSupport;
-      int gcn;
+      const char* gcn;
       hipDeviceArch_t arch;
     }gpu;
     struct {
       uint64_t asic;
       int port;
-      float width;
+      float bw;
       float latency;
       int gdrSupport;
       int collSupport;
@@ -156,8 +163,8 @@ struct ncclTopoNodeSet {
 
 struct ncclTopoSystem {
   struct ncclTopoNodeSet nodes[NCCL_TOPO_NODE_TYPES];
-  float maxWidth;
-  float totalWidth;
+  float maxBw;
+  float totalBw;
   int type;
   int nRanks;
   int netGdrLevel;
@@ -165,14 +172,16 @@ struct ncclTopoSystem {
 
   bool pivotA2AEnabled;
   int pivotA2ANumBiRings;
+  bool treeDefined;
   bool ll128Enabled;
   float baseBw;
+  bool mscclEnabled;
 };
 
 ncclResult_t ncclTopoGetNode(struct ncclTopoSystem* system, struct ncclTopoNode** node, int type, uint64_t id);
 ncclResult_t ncclTopoCreateNode(struct ncclTopoSystem* system, struct ncclTopoNode** node, int type, uint64_t id);
 ncclResult_t ncclTopoRemoveNode(struct ncclTopoSystem* system, int type, int id);
-ncclResult_t ncclTopoConnectNodes(struct ncclTopoNode* node, struct ncclTopoNode* remNode, int type, float width);
+ncclResult_t ncclTopoConnectNodes(struct ncclTopoNode* node, struct ncclTopoNode* remNode, int type, float bw);
 ncclResult_t ncclTopoPrintPaths(struct ncclTopoSystem* system);
 ncclResult_t ncclTopoLoadSystem(const char* xmlTopoFile, struct ncclTopoSystem* system);
 ncclResult_t ncclTopoGetIntermediateRank(struct ncclTopoSystem* system, int rank, int netDev, int* intermediateRank);
@@ -197,11 +206,9 @@ static ncclResult_t ncclTopoIdToIndex(struct ncclTopoSystem* system, int type, i
 static ncclResult_t ncclTopoRankToIndex(struct ncclTopoSystem* system, int rank, int* index) {
   *index = -1;
   for (int i=0; i<system->nodes[GPU].count; i++) {
-    for (int j=0; j<system->nodes[GPU].nodes[i].gpu.nRanksPerGpu; j++ ) {
-      if (system->nodes[GPU].nodes[i].gpu.rank[j] == rank) {
-	    *index = i;
-	    return ncclSuccess;
-      }
+    if (system->nodes[GPU].nodes[i].gpu.rank == rank) {
+      *index = i;
+      return ncclSuccess;
     }
   }
   return ncclInternalError;
@@ -211,7 +218,7 @@ static ncclResult_t ncclTopoDevToRank(struct ncclTopoSystem* system, int dev, in
   *rank = -1;
   for (int i=0; i<system->nodes[GPU].count; i++) {
     if (system->nodes[GPU].nodes[i].gpu.dev == dev) {
-      *rank = system->nodes[GPU].nodes[i].gpu.rank[0];
+      *rank = system->nodes[GPU].nodes[i].gpu.rank;
       return ncclSuccess;
     }
   }
@@ -219,11 +226,19 @@ static ncclResult_t ncclTopoDevToRank(struct ncclTopoSystem* system, int dev, in
 }
 
 // Returns XGMI speed in GB/s
-static float ncclTopoXGMISpeed(int gcn) {
-  return gcn == 910 ? MI200_XGMI_WIDTH : VEGA_XGMI_WIDTH;
+static float ncclTopoXGMISpeed(const char* gcn) {
+  if (IsArchMatch(gcn, "gfx90a"))
+    return MI200_XGMI_WIDTH;
+  else if (IsArchMatch(gcn, "gfx94"))
+    return GFX94X_XGMI_WIDTH;
+  else
+    return VEGA_XGMI_WIDTH;
 }
 
-#define ncclGetKernelIndex(p_comm) \
-  (((p_comm)->topo->ll128Enabled ? 1 : 0)*2 + ((p_comm)->collTraceThread ? 1 : 0))
+#if ENABLE_COLLTRACE
+  #define ncclGetKernelIndex(p_comm) ((p_comm)->collTraceThread ? 1 : 0)
+#else
+  #define ncclGetKernelIndex(p_comm) (0)
+#endif
 
 #endif

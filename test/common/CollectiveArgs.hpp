@@ -76,9 +76,10 @@ namespace RcclUnitTesting
   struct OptionalColArgs
   {
     ncclRedOp_t     redOp = ncclSum;
-    int             root = 0; // Used as "peer" for Send/Recv
-    ScalarTransport scalarTransport;   // Used for custom reduction operators
-    int             scalarMode = -1; // -1 if scalar not used
+    int             root = 0;               // Used as "peer" for Send/Recv
+    ScalarTransport scalarTransport;        // Used for custom reduction operators
+    int             scalarMode = -1;        // -1 if scalar not used
+
     // allToAllv args
     size_t          sendcounts[MAX_RANKS*MAX_RANKS];
     size_t          sdispls[MAX_RANKS*MAX_RANKS];
@@ -102,6 +103,7 @@ namespace RcclUnitTesting
     size_t          numInputElements;
     size_t          numOutputElements;
     PtrUnion        localScalar;
+    int             streamIdx;
     OptionalColArgs options;
 
     // Data
@@ -124,6 +126,7 @@ namespace RcclUnitTesting
                     ncclDataType_t  const dataType,
                     size_t          const numInputElements,
                     size_t          const numOutputElements,
+                    int             const streamIdx,
                     OptionalColArgs const &optionalArgs = {});
 
     // Allocates GPU memory for input/output and CPU memory for expected

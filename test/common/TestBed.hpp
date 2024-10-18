@@ -25,29 +25,37 @@ namespace RcclUnitTesting
     int                        numActiveChildren;     // List of active children (with usable RCCL comms)
     int                        numActiveRanks;        // Current # of ranks in use
     int                        numCollectivesInGroup; // # of collectives to execute per group call
-
-    EnvVars ev;                                       // Environment variables
+    bool                       useBlocking;           // RCCL communication with blocking or non-blocking option
+    int                        numStreamsPerGroup;    // # of different streams available per group call
+    EnvVars                    ev;                    // Environment variables
 
     // Constructor - Creates one child process per detected GPU device that waits for further commands
     TestBed();
 
     // Prepare TestBed for use with GPUs across multiple child processes
-    void InitComms(std::vector<std::vector<int>> const& deviceIdsPerChild, int const numCollectivesInGroup = 1);
+    void InitComms(std::vector<std::vector<int>> const& deviceIdsPerChild,
+                   int  const numCollectivesInGroup = 1,
+                   bool const useBlocking           = true,
+                   int  const numStreamsPerGroup    = 1);
+
     // Prepare TestBed for use with GPUs on a single child process
-    void InitComms(int const numGpus, int const numCollectivesInGroup = 1);
+    void InitComms(int  const numGpus,
+                   int  const numCollectivesInGroup = 1,
+                   bool const useBlocking           = true,
+                   int  const numStreamsPerGroup    = 1);
 
     // Set collectives arguments for specified collective / rank
     // Setting scalarsPerRank to non-null will create custom reduction operator
     // Using collId = -1 (default) applies settings to all collectives in group
     // Using rank = -1 (default) applies settings to all ranks
-
     void SetCollectiveArgs(ncclFunc_t      const funcType,
                            ncclDataType_t  const dataType,
                            size_t          const numInputElements,
                            size_t          const numOutputElements,
                            OptionalColArgs const &optionalArgs = {},
-                           int             const collId = -1,
-                           int             const rank = -1);
+                           int             const collId        = -1,
+                           int             const rank          = -1,
+                           int             const streamIdx     = 0);
 
     // Allocate memory for specified collective / rank
     // - Requires SetCollectiveArgs to have been called already
@@ -69,7 +77,7 @@ namespace RcclUnitTesting
 
     // Execute all collectives on all test children
     // Blocks until collective is completed
-    void ExecuteCollectives(std::vector<int> const &currentRanks = {});
+    void ExecuteCollectives(std::vector<int> const &currentRanks = {}, bool const useHipGraph = false);
 
     // Perform results validation - compare output to expected
     void ValidateResults(bool& isCorrect, int collId = -1, int const rank = -1);
@@ -96,7 +104,7 @@ namespace RcclUnitTesting
     // Helper function that splits up GPUs to the given number of processes
     static std::vector<std::vector<int>> GetDeviceIdsList(int const numProcesses,
                                                           int const numGpus,
-							  int const ranksPerGpu);
+                                                          int const ranksPerGpu);
     static std::vector<std::vector<int>> GetDeviceIdsList(int const numProcesses,
                                                           int const numGpus);
 
@@ -109,6 +117,7 @@ namespace RcclUnitTesting
                                        int            const root,
                                        bool           const inPlace,
                                        bool           const managedMem,
+                                       bool           const useHipGraph,
                                        int            const ranksPerProc=1);
 
     // Run a simple sweep
@@ -118,7 +127,11 @@ namespace RcclUnitTesting
                         std::vector<int>            const& roots,
                         std::vector<int>            const& numElements,
                         std::vector<bool>           const& inPlaceList,
-                        std::vector<bool>           const& managedMemList);
+                        std::vector<bool>           const& managedMemList,
+                        std::vector<bool>           const& useHipGraphList);
+
+    // Wait for user-input if in interactive mode
+    void InteractiveWait(std::string message);
 
     // Used to track total number of calls to ExecuteCollectives()
     static int& NumTestsRun();

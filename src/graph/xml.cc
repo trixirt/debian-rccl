@@ -14,6 +14,7 @@
 #include "nvmlwrap.h"
 #include "xml.h"
 #include "rocm_smi_wrap.h"
+#include "archinfo.h"
 
 /*******************/
 /* XML File Parser */
@@ -615,7 +616,7 @@ ncclResult_t ncclTopoGetXmlFromGpu(struct ncclXmlNode* pciNode, uint32_t rocmDev
     if (rocmDev == -1) {
       const char* busId;
       NCCLCHECK(xmlGetAttr(pciNode, "busid", &busId));
-      if (busId == NULL || hipDeviceGetByPCIBusId(&dev, busId) != hipSuccess) dev = -1;
+      if (busId == NULL || cudaDeviceGetByPCIBusId(&dev, busId) != cudaSuccess) dev = -1;
     } else {
       dev = rocmDev;
     }
@@ -627,23 +628,30 @@ ncclResult_t ncclTopoGetXmlFromGpu(struct ncclXmlNode* pciNode, uint32_t rocmDev
   NCCLCHECK(xmlGetAttrIndex(gpuNode, "sm", &index));
   if (index == -1) {
     int cudaMajor, cudaMinor;
-    hipDeviceProp_t devProp;
-    CUDACHECK(hipGetDeviceProperties(&devProp, 0));
+    cudaDeviceProp devProp;
+    CUDACHECK(cudaGetDeviceProperties(&devProp, 0));
     cudaMajor = devProp.major; cudaMinor = devProp.minor;
     NCCLCHECK(xmlSetAttrInt(gpuNode, "sm", cudaMajor*10+cudaMinor));
   }
   int sm;
   NCCLCHECK(xmlGetAttrInt(gpuNode, "sm", &sm));
 
-  int gcn;
+  const char* gcn;
+  const char* gcnArchName;
   NCCLCHECK(xmlGetAttrIndex(gpuNode, "gcn", &index));
   if (index == -1) {
     hipDeviceProp_t devProp;
     CUDACHECK(hipGetDeviceProperties(&devProp, 0));
-    gcn = devProp.gcnArch;
-    NCCLCHECK(xmlSetAttrInt(gpuNode, "gcn", gcn));
+    //extract only the releveant info from the gcnArchName attribute
+    //e.g.: convert "gfx908:sramecc+:xnack-" to "gfx908"
+    char gcnArchNameSubstr[6];
+    GcnArchNameFormat(devProp.gcnArchName, gcnArchNameSubstr);
+    gcn = gcnArchNameSubstr;
+    NCCLCHECK(xmlSetAttr(gpuNode, "gcn", gcn));
   }
-  NCCLCHECK(xmlGetAttrInt(gpuNode, "gcn", &gcn));
+  NCCLCHECK(xmlGetAttr(gpuNode, "gcn", &gcn));
+  convertGcnArchToGcnArchName(gcn, &gcnArchName);
+  NCCLCHECK(xmlSetAttr(gpuNode, "gcn", gcnArchName));
 
   rcclHipDeviceArch_t arch;
   NCCLCHECK(xmlGetAttrIndex(gpuNode, "arch", &index));
@@ -688,7 +696,7 @@ ncclResult_t ncclTopoGetXmlFromGpu(struct ncclXmlNode* pciNode, uint32_t rocmDev
     }
 #else
     // NVML NVLink detection
-    int maxNvLinks = (sm < 60) ? 0 : (sm < 70) ? 4 : (sm < 80) ? 6 : 12;
+    int maxNvLinks = (sm < 60) ? 0 : (sm < 70) ? 4 : (sm < 80) ? 6 : (sm < 90) ? 12 : 18;
 
     if (maxNvLinks > 0 && nvmlDev == NULL) {
       WARN("No NVML device handle. Skipping nvlink detection.");
@@ -701,8 +709,21 @@ ncclResult_t ncclTopoGetXmlFromGpu(struct ncclXmlNode* pciNode, uint32_t rocmDev
       if ((ncclNvmlDeviceGetNvLinkCapability(nvmlDev, l, NVML_NVLINK_CAP_P2P_SUPPORTED, &canP2P) != ncclSuccess) || !canP2P) continue;
 
       // Make sure the Nvlink is up. The previous call should have trained the link.
-      nvmlEnableState_t isActive;
-      if ((ncclNvmlDeviceGetNvLinkState(nvmlDev, l, &isActive) != ncclSuccess) || (isActive != NVML_FEATURE_ENABLED)) continue;
+      nvmlEnableState_t isActive = NVML_FEATURE_DISABLED;
+#if CUDART_VERSION >= 11080
+      if (sm >= 90) {
+        nvmlFieldValue_t fv;
+        fv.fieldId = NVML_FI_DEV_NVLINK_GET_STATE;
+        fv.scopeId = l;
+        // fv.value will contain NV_FEATURE_ENABLED or NV_FEATURE_DISABLED
+        if ((ncclNvmlDeviceGetFieldValues(nvmlDev, 1, &fv) == ncclSuccess) && (fv.nvmlReturn == NVML_SUCCESS))
+          isActive = (nvmlEnableState_t) fv.value.uiVal;
+      } else /* FALLTHRU to GetNvLinkState if before SM90 */
+#endif
+      {
+        (void) ncclNvmlDeviceGetNvLinkState(nvmlDev, l, &isActive);
+      }
+      if (isActive != NVML_FEATURE_ENABLED) continue;
 
       // Try to figure out what's on the other side of the NVLink
       nvmlPciInfo_t remoteProc;
@@ -776,8 +797,8 @@ ncclResult_t ncclTopoFillGpu(struct ncclXml* xml, const char* busId, struct nccl
   }
   NCCLCHECK(ncclTopoGetXmlFromGpu(node, devIndex, xml, gpuNode));
 #else
-  nvmlDevice_t nvmlDev = NULL;
-  if (ncclNvmlDeviceGetHandleByPciBusId(busId, &nvmlDev) != ncclSuccess) nvmlDev = NULL;
+  nvmlDevice_t nvmlDev;
+  NCCLCHECK(ncclNvmlDeviceGetHandleByPciBusId(busId, &nvmlDev));
   NCCLCHECK(ncclTopoGetXmlFromGpu(node, nvmlDev, xml, gpuNode));
 #endif
   return ncclSuccess;

@@ -14,13 +14,14 @@
 
 template<typename T, typename RedOp>
 struct RunWork<ncclFuncSendRecv, T, RedOp, NCCL_ALGO_RING, NCCL_PROTO_SIMPLE> {
-  __device__ __forceinline__ void runSend(const int tid, const int nthreads, const int group, struct ncclWorkElemP2p* args) {
+  template<typename Proto>
+  __device__ void runSend(const int tid, const int nthreads, const uint8_t group, struct ncclWorkElemP2p* args) {
     void* buff = reinterpret_cast<void*>(uintptr_t(args->buffHi32)<<32 | args->buffLo32);
-    size_t count = reinterpret_cast<size_t>(size_t(args->countHi32)<<32 | args->countLo32);
+    ssize_t count = reinterpret_cast<size_t>(size_t(args->countHi32)<<32 | args->countLo32);
 
 #if defined(ENABLE_NPKIT)
     bool isNpKitThread = (tid == 0);
-    int npKitCtxIdx = blockIdx.x * NCCL_MAX_WORK_ELEMENTS_P2P;
+    int npKitCtxIdx = blockIdx.x * NCCL_MAX_WORK_ELEMENTS_P2P + group;
 #endif
 
 #if defined(ENABLE_NPKIT) && defined(ENABLE_NPKIT_EVENT_TIME_SYNC_CPU)
@@ -33,7 +34,7 @@ struct RunWork<ncclFuncSendRecv, T, RedOp, NCCL_ALGO_RING, NCCL_PROTO_SIMPLE> {
 
 #if defined(ENABLE_NPKIT) && defined(ENABLE_NPKIT_EVENT_TIME_SYNC_GPU)
     if (isNpKitThread) {
-      NpKit::CollectGpuEvent(NPKIT_EVENT_TIME_SYNC_GPU, 0, 0, __builtin_amdgcn_s_memrealtime(),
+      NpKit::CollectGpuEvent(NPKIT_EVENT_TIME_SYNC_GPU, 0, 0, NPKIT_GET_GPU_TIMESTAMP(),
           ncclShmem.comm.npKitEventCollectContexts + npKitCtxIdx);
     }
 #endif
@@ -45,41 +46,40 @@ struct RunWork<ncclFuncSendRecv, T, RedOp, NCCL_ALGO_RING, NCCL_PROTO_SIMPLE> {
 
 #if defined(ENABLE_NPKIT) && defined(ENABLE_NPKIT_EVENT_SEND_RECV_LOCAL_COPY_ENTRY)
         if (isNpKitThread) {
-          NpKit::CollectGpuEvent(NPKIT_EVENT_SEND_RECV_LOCAL_COPY_ENTRY, count*sizeof(T), 0, __builtin_amdgcn_s_memrealtime(),
+          NpKit::CollectGpuEvent(NPKIT_EVENT_SEND_RECV_LOCAL_COPY_ENTRY, count*sizeof(T), 0, NPKIT_GET_GPU_TIMESTAMP(),
               ncclShmem.comm.npKitEventCollectContexts + npKitCtxIdx);
         }
 #endif
 
 #if defined(ENABLE_NPKIT) && defined(ENABLE_NPKIT_EVENT_PRIM_SIMPLE_REDUCE_OR_COPY_MULTI_ENTRY)
         if (isNpKitThread) {
-          NpKit::CollectGpuEvent(NPKIT_EVENT_PRIM_SIMPLE_REDUCE_OR_COPY_MULTI_ENTRY, count*sizeof(T), 0, __builtin_amdgcn_s_memrealtime(),
+          NpKit::CollectGpuEvent(NPKIT_EVENT_PRIM_SIMPLE_REDUCE_OR_COPY_MULTI_ENTRY, count*sizeof(T), 0, NPKIT_GET_GPU_TIMESTAMP(),
               ncclShmem.comm.npKitEventCollectContexts + npKitCtxIdx);
         }
 #endif
 
-        ReduceOrCopyMulti<COLL_UNROLL, RedOp, T, 1, 1, 1, 1, 0>(tid, nthreads, nullptr, false, 1, (const T**)&buff, 1, (T**)&recvBuff, count);
-
+        reduceCopy<COLL_UNROLL, RedOp, T, 0,1,1, 0,1,1, /*PreOpSrcs=*/0>
+          (tid, nthreads, 0, nullptr, false, 1, &buff, 1, &recvBuff, count);
 #if defined(ENABLE_NPKIT) && defined(ENABLE_NPKIT_EVENT_PRIM_SIMPLE_REDUCE_OR_COPY_MULTI_EXIT)
         if (isNpKitThread) {
-          NpKit::CollectGpuEvent(NPKIT_EVENT_PRIM_SIMPLE_REDUCE_OR_COPY_MULTI_EXIT, count*sizeof(T), 0, __builtin_amdgcn_s_memrealtime(),
+          NpKit::CollectGpuEvent(NPKIT_EVENT_PRIM_SIMPLE_REDUCE_OR_COPY_MULTI_EXIT, count*sizeof(T), 0, NPKIT_GET_GPU_TIMESTAMP(),
               ncclShmem.comm.npKitEventCollectContexts + npKitCtxIdx);
         }
 #endif
 
 #if defined(ENABLE_NPKIT) && defined(ENABLE_NPKIT_EVENT_SEND_RECV_LOCAL_COPY_EXIT)
         if (isNpKitThread) {
-          NpKit::CollectGpuEvent(NPKIT_EVENT_SEND_RECV_LOCAL_COPY_EXIT, count*sizeof(T), 0, __builtin_amdgcn_s_memrealtime(),
+          NpKit::CollectGpuEvent(NPKIT_EVENT_SEND_RECV_LOCAL_COPY_EXIT, count*sizeof(T), 0, NPKIT_GET_GPU_TIMESTAMP(),
               ncclShmem.comm.npKitEventCollectContexts + npKitCtxIdx);
         }
 #endif
-
       }
     } else {
-      using Proto = ProtoSimple<1, 1>;
-      int const chunkSize = args->chunkSize/sizeof(T);
+      int chunkSize = args->chunkSize/sizeof(T);
+      if (args->proto == NCCL_PROTO_LL) chunkSize /= 2;
       int const peer = args->peer;
       Primitives<T, RedOp, FanAsymmetric<0, 1>, 0, Proto, 1> prims
-        (tid, nthreads, nullptr, &peer, buff, nullptr, /*redOpArg(ignored)=*/0, group);
+        (tid, nthreads, nullptr, &peer, buff, nullptr, /*redOpArg(ignored)=*/0, group, args->connIndex, args->connIndex);
 
 #if defined(ENABLE_NPKIT)
       if (isNpKitThread) {
@@ -89,7 +89,7 @@ struct RunWork<ncclFuncSendRecv, T, RedOp, NCCL_ALGO_RING, NCCL_PROTO_SIMPLE> {
 
 #if defined(ENABLE_NPKIT) && defined(ENABLE_NPKIT_EVENT_SEND_RECV_SEND_ENTRY)
       if (isNpKitThread) {
-        NpKit::CollectGpuEvent(NPKIT_EVENT_SEND_RECV_SEND_ENTRY, count*sizeof(T), 0, __builtin_amdgcn_s_memrealtime(),
+        NpKit::CollectGpuEvent(NPKIT_EVENT_SEND_RECV_SEND_ENTRY, count*sizeof(T), 0, NPKIT_GET_GPU_TIMESTAMP(),
             ncclShmem.comm.npKitEventCollectContexts + npKitCtxIdx);
         prims.npKitDataProcessTotalTime = 0;
       }
@@ -104,7 +104,7 @@ struct RunWork<ncclFuncSendRecv, T, RedOp, NCCL_ALGO_RING, NCCL_PROTO_SIMPLE> {
 
 #if defined(ENABLE_NPKIT) && defined(ENABLE_NPKIT_EVENT_SEND_RECV_SEND_EXIT)
       if (isNpKitThread) {
-        NpKit::CollectGpuEvent(NPKIT_EVENT_SEND_RECV_SEND_EXIT, count*sizeof(T), prims.npKitDataProcessTotalTime, __builtin_amdgcn_s_memrealtime(),
+        NpKit::CollectGpuEvent(NPKIT_EVENT_SEND_RECV_SEND_EXIT, count*sizeof(T), prims.npKitDataProcessTotalTime, NPKIT_GET_GPU_TIMESTAMP(),
             ncclShmem.comm.npKitEventCollectContexts + npKitCtxIdx);
       }
 #endif
@@ -112,10 +112,11 @@ struct RunWork<ncclFuncSendRecv, T, RedOp, NCCL_ALGO_RING, NCCL_PROTO_SIMPLE> {
     }
   }
 
-  __device__ __forceinline__ void runRecv(const int tid, const int nthreads, const int group, struct ncclWorkElemP2p* args) {
+  template<typename Proto>
+  __device__ void runRecv(const int tid, const int nthreads, const uint8_t group, struct ncclWorkElemP2p* args) {
 #if defined(ENABLE_NPKIT)
     bool isNpKitThread = (tid == 0);
-    int npKitCtxIdx = blockIdx.x * NCCL_MAX_WORK_ELEMENTS_P2P + 1;
+    int npKitCtxIdx = blockIdx.x * NCCL_MAX_WORK_ELEMENTS_P2P + group;
 #endif
 
 #if defined(ENABLE_NPKIT) && defined(ENABLE_NPKIT_EVENT_TIME_SYNC_CPU)
@@ -128,19 +129,19 @@ struct RunWork<ncclFuncSendRecv, T, RedOp, NCCL_ALGO_RING, NCCL_PROTO_SIMPLE> {
 
 #if defined(ENABLE_NPKIT) && defined(ENABLE_NPKIT_EVENT_TIME_SYNC_GPU)
     if (isNpKitThread) {
-      NpKit::CollectGpuEvent(NPKIT_EVENT_TIME_SYNC_GPU, 0, 0, __builtin_amdgcn_s_memrealtime(),
+      NpKit::CollectGpuEvent(NPKIT_EVENT_TIME_SYNC_GPU, 0, 0, NPKIT_GET_GPU_TIMESTAMP(),
           ncclShmem.comm.npKitEventCollectContexts + npKitCtxIdx);
     }
 #endif
 
     if (args->peer != ncclShmem.comm.rank) {
-      using Proto = ProtoSimple<1, 1>;
       void* buff = reinterpret_cast<void*>(uintptr_t(args->buffHi32)<<32 | args->buffLo32);
       ssize_t count = reinterpret_cast<size_t>(size_t(args->countHi32)<<32 | args->countLo32);
-      int const chunkSize = args->chunkSize/sizeof(T);
+      int chunkSize = args->chunkSize/sizeof(T);
+      if (args->proto == NCCL_PROTO_LL) chunkSize /= 2; // This is to account for chunkEffectiveSize
       int const peer = args->peer;
       Primitives<T, RedOp, FanAsymmetric<1, 0>, 0, Proto, 1> prims
-        (tid, nthreads, &peer, nullptr, nullptr, buff, /*redOpArg(ignored)=*/0, group);
+        (tid, nthreads, &peer, nullptr, nullptr, buff, /*redOpArg(ignored)=*/0, group, args->connIndex, args->connIndex);
 
 #if defined(ENABLE_NPKIT)
       if (isNpKitThread) {
@@ -150,7 +151,7 @@ struct RunWork<ncclFuncSendRecv, T, RedOp, NCCL_ALGO_RING, NCCL_PROTO_SIMPLE> {
 
 #if defined(ENABLE_NPKIT) && defined(ENABLE_NPKIT_EVENT_SEND_RECV_RECV_ENTRY)
       if (isNpKitThread) {
-        NpKit::CollectGpuEvent(NPKIT_EVENT_SEND_RECV_RECV_ENTRY, count*sizeof(T), 0, __builtin_amdgcn_s_memrealtime(),
+        NpKit::CollectGpuEvent(NPKIT_EVENT_SEND_RECV_RECV_ENTRY, count*sizeof(T), 0, NPKIT_GET_GPU_TIMESTAMP(),
             ncclShmem.comm.npKitEventCollectContexts + npKitCtxIdx);
         prims.npKitDataProcessTotalTime = 0;
       }
@@ -165,7 +166,7 @@ struct RunWork<ncclFuncSendRecv, T, RedOp, NCCL_ALGO_RING, NCCL_PROTO_SIMPLE> {
 
 #if defined(ENABLE_NPKIT) && defined(ENABLE_NPKIT_EVENT_SEND_RECV_RECV_EXIT)
       if (isNpKitThread) {
-        NpKit::CollectGpuEvent(NPKIT_EVENT_SEND_RECV_RECV_EXIT, count*sizeof(T), prims.npKitDataProcessTotalTime, __builtin_amdgcn_s_memrealtime(),
+        NpKit::CollectGpuEvent(NPKIT_EVENT_SEND_RECV_RECV_EXIT, count*sizeof(T), prims.npKitDataProcessTotalTime, NPKIT_GET_GPU_TIMESTAMP(),
             ncclShmem.comm.npKitEventCollectContexts + npKitCtxIdx);
       }
 #endif
@@ -173,7 +174,11 @@ struct RunWork<ncclFuncSendRecv, T, RedOp, NCCL_ALGO_RING, NCCL_PROTO_SIMPLE> {
     }
   }
 
+#if defined(USE_INDIRECT_FUNCTION_CALL) && !defined(__gfx940__) && !defined(__gfx941__) && !defined(__gfx942__)
+  __device__  void run(ncclWork *work) {
+#else
   __device__  __attribute__((noinline)) void run(ncclWork *work) {
+#endif
     struct ncclWorkElemP2p* args = work->p2pElems;
     int ngroups = args->ngroups;
     int tid = threadIdx.x;
@@ -183,18 +188,40 @@ struct RunWork<ncclFuncSendRecv, T, RedOp, NCCL_ALGO_RING, NCCL_PROTO_SIMPLE> {
     // warpStarts were rounded thanks to int division, but for group number we need to round the other way around
     // So we mirror wid then mirror again the group.
     #define NWARPS (NCCL_MAX_NTHREADS/WARP_SIZE)
-    int group = ngroups-1- (NWARPS-1-wid) * ngroups / NWARPS;
+    uint8_t group = ngroups-1- (NWARPS-1-wid) * ngroups / NWARPS;
     args += group;
     tid -= args->warpStart * WARP_SIZE;
     int nthreads = args->nWarps * WARP_SIZE;
-    group |= (args->connIndex<<16); // Used to select connIndex 1
 
     if (args->p2pType == ncclWorkP2pTypeUnused) return;
     if (tid >= nthreads || args->peer == -1) return;
+
+    // Select Proto here
+    // This is to allow the same kernel to run multiple primitives on different warps (thread groups)
     if ((group%2) == 0) {
-      runRecv(tid, nthreads, group, args);
+      if (args->proto == NCCL_PROTO_LL) {
+        runRecv<ProtoLL>(tid, nthreads, group, args);
+      } else {
+#if defined(__gfx90a__)
+        runRecv<ProtoSimple<1,1,8>>(tid, nthreads, group, args);
+#elif defined(__gfx908__)
+        runRecv<ProtoSimple<1,1,4>>(tid, nthreads, group, args);
+#else
+        runRecv<ProtoSimple<1,1>>(tid, nthreads, group, args);
+#endif
+      }
     } else {
-      runSend(tid, nthreads, group, args);
+      if (args->proto == NCCL_PROTO_LL) {
+        runSend<ProtoLL>(tid, nthreads, group, args);
+      } else {
+#if defined(__gfx90a__)
+        runSend<ProtoSimple<1,1,8>>(tid, nthreads, group, args);
+#elif defined(__gfx908__)
+        runSend<ProtoSimple<1,1,4>>(tid, nthreads, group, args);
+#else
+        runSend<ProtoSimple<1,1>>(tid, nthreads, group, args);
+#endif
+      }
     }
   }
 };

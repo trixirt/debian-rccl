@@ -8,36 +8,38 @@
 #include "nccl.h"
 #include "debug.h"
 #include "rocmwrap.h"
+#include "hsa/hsa.h"
+#include "param.h"
 
 #include <dlfcn.h>
+#include <sys/utsname.h>
+#include <fstream>
 
 #define DECLARE_ROCM_PFN(symbol) PFN_##symbol pfn_##symbol = nullptr
 
 DECLARE_ROCM_PFN(hsa_amd_portable_export_dmabuf); // DMA-BUF support
-
+NCCL_PARAM(DmaBufEnable, "DMABUF_ENABLE", 0);
 /* ROCr Driver functions loaded with dlsym() */
 DECLARE_ROCM_PFN(hsa_init);
 DECLARE_ROCM_PFN(hsa_system_get_info);
 DECLARE_ROCM_PFN(hsa_status_string);
 
-static enum { hsaUninitialized, hsaInitializing, hsaInitialized, hsaError } hsaState = hsaUninitialized;
 
 static void *hsaLib;
 static uint16_t version_major, version_minor;
+bool ncclCudaLaunchBlocking = false;
 
-ncclResult_t rocmLibraryInit(void) {
+static pthread_once_t initOnceControl = PTHREAD_ONCE_INIT;
+static ncclResult_t initResult;
+
+static void initOnceFunc() {
+  do {
+    char* val = getenv("CUDA_LAUNCH_BLOCKING");
+    ncclCudaLaunchBlocking = val!=nullptr && val[0]!=0 && !(val[0]=='0' && val[1]==0);
+  } while (0);
+
+  bool dmaBufSupport = false;
   hsa_status_t res;
-
-  if (hsaState == hsaInitialized)
-    return ncclSuccess;
-  if (hsaState == hsaError)
-    return ncclSystemError;
-
-  if (__sync_bool_compare_and_swap(&hsaState, hsaUninitialized, hsaInitializing) == false) {
-    // Another thread raced in front of us. Wait for it to be done.
-    while (hsaState == hsaInitializing) sched_yield();
-    return (hsaState == hsaInitialized) ? ncclSuccess : ncclSystemError;
-  }
 
   /*
    * Load ROCr driver library
@@ -96,11 +98,62 @@ ncclResult_t rocmLibraryInit(void) {
     //goto error;
   //}
 
-  pfn_hsa_amd_portable_export_dmabuf = (PFN_hsa_amd_portable_export_dmabuf) dlsym(hsaLib, "hsa_amd_portable_export_dmabuf");
-  if (pfn_hsa_amd_portable_export_dmabuf == NULL) {
-    WARN("Failed to load ROCr missing symbol hsa_amd_portable_export_dmabuf");
+  /* DMA-BUF support */
+  //ROCm support
+  if (ncclParamDmaBufEnable() == 0 ) {
+    INFO(NCCL_INIT, "Dmabuf feature disabled without NCCL_ENABLE_DMABUF_SUPPORT=1");
     goto error;
   }
+  res = pfn_hsa_system_get_info((hsa_system_info_t) 0x204, &dmaBufSupport);
+  if (res != HSA_STATUS_SUCCESS || !dmaBufSupport) {
+    INFO(NCCL_INIT, "Current version of ROCm does not support dmabuf feature.");
+    goto error;
+  }
+  else {
+    pfn_hsa_amd_portable_export_dmabuf = (PFN_hsa_amd_portable_export_dmabuf) dlsym(hsaLib, "hsa_amd_portable_export_dmabuf");
+    if (pfn_hsa_amd_portable_export_dmabuf == NULL) {
+      WARN("Failed to load ROCr missing symbol hsa_amd_portable_export_dmabuf");
+      goto error;
+    }
+    else {
+      //check OS kernel support
+      struct utsname utsname;
+      FILE *fp = NULL;
+      char kernel_opt1[28] = "CONFIG_DMABUF_MOVE_NOTIFY=y";
+      char kernel_opt2[20] = "CONFIG_PCI_P2PDMA=y";
+      char kernel_conf_file[128];
+      char buf[256];
+      int found_opt1 = 0;
+      int found_opt2 = 0;
+
+      //check for kernel name exists
+      if (uname(&utsname) == -1) INFO(NCCL_INIT,"Could not get kernel name");
+      //format and store the kernel conf file location
+      snprintf(kernel_conf_file, sizeof(kernel_conf_file), "/boot/config-%s", utsname.release);
+      fp = fopen(kernel_conf_file, "r");
+      if (fp == NULL) INFO(NCCL_INIT,"Could not open kernel conf file");
+      //look for kernel_opt1 and kernel_opt2 in the conf file and check
+      while (fgets(buf, sizeof(buf), fp) != NULL) {
+        if (strstr(buf, kernel_opt1) != NULL) {
+          found_opt1 = 1;
+          INFO(NCCL_INIT,"CONFIG_DMABUF_MOVE_NOTIFY=y in /boot/config-%s", utsname.release);
+        }
+        if (strstr(buf, kernel_opt2) != NULL) {
+          found_opt2 = 1;
+          INFO(NCCL_INIT,"CONFIG_PCI_P2PDMA=y in /boot/config-%s", utsname.release);
+        }
+      }
+      if (!found_opt1 || !found_opt2) {
+        dmaBufSupport = 0;
+        INFO(NCCL_INIT, "CONFIG_DMABUF_MOVE_NOTIFY and CONFIG_PCI_P2PDMA should be set for DMA_BUF in /boot/config-%s", utsname.release);
+        INFO(NCCL_INIT, "DMA_BUF_SUPPORT Failed due to OS kernel support");
+      }
+
+      if(dmaBufSupport) INFO(NCCL_INIT, "DMA_BUF Support Enabled");
+      else goto error;
+    }
+  }
+
   /*
    * Required to initialize the ROCr Driver.
    * Multiple calls of hsa_init() will return immediately
@@ -108,12 +161,17 @@ ncclResult_t rocmLibraryInit(void) {
    */
   pfn_hsa_init();
 
-  hsaState = hsaInitialized;
-  return ncclSuccess;
+  initResult = ncclSuccess;
 
 error:
-  hsaState = hsaError;
-  return ncclSystemError;
+  initResult = ncclSystemError;
 }
 
+int ncclCuMemEnable() {
+  return 0;
+}
 
+ncclResult_t rocmLibraryInit() {
+  pthread_once(&initOnceControl, initOnceFunc);
+  return initResult;
+}

@@ -7,12 +7,16 @@
 
 #include "devcomm.h"
 #include "collectives.h"
-#include "reduce_kernel.h"
+#include "common_kernel.h"
 #include "common.h"
 
 namespace {
   template<typename T, typename RedOp>
+#if defined(USE_INDIRECT_FUNCTION_CALL) && !defined(__gfx940__) && !defined(__gfx941__) && !defined(__gfx942__)
+  __device__ void oneRankReduce() {
+#else
   __device__ __attribute__((noinline)) void oneRankReduce() {
+#endif
     ncclWork *w = &ncclShmem.work;
     int tid = threadIdx.x;
     int tn = blockDim.x;
@@ -36,16 +40,25 @@ namespace {
       i1 = i1 < eltN ? i1 : eltN;
       src += i0;
       dst += i0;
-      ReduceOrCopyMulti<COLL_UNROLL, RedOp, T, 1, 1, 1, 1, 1>
-        (tid, tn, &(we->redOpArg), true, 1, &src, 1, &dst, i1-i0);
+      void *vsrc = (void*)src;
+      void *vdst = (void*)dst;
+      reduceCopy<COLL_UNROLL, RedOp, T, 0,1,1, 0,1,1, /*PreOpSrcs=*/1>
+        (tid, tn, we->redOpArg, &(we->redOpArg), true, 1, &vsrc, 1, &vdst, i1-i0);
     }
   }
 }
 
+#if defined(USE_INDIRECT_FUNCTION_CALL) && !defined(__gfx940__) && !defined(__gfx941__) && !defined(__gfx942__)
 #define INSTANTIATE(devredop, type) \
   __device__ void NCCL_ONERANK_REDUCE_NAME(devredop, type)() { \
     oneRankReduce<type, Func##devredop<type>>(); \
   }
+#else
+#define INSTANTIATE(devredop, type) \
+  __device__ __attribute__((noinline)) void NCCL_ONERANK_REDUCE_NAME(devredop, type)() { \
+    oneRankReduce<type, Func##devredop<type>>(); \
+  }
+#endif
 
 INSTANTIATE(PreMulSum, int8_t)
 INSTANTIATE(PreMulSum, uint8_t)

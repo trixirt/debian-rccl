@@ -18,13 +18,16 @@ namespace RcclUnitTesting
   class EnvVars
   {
   public:
-    bool showNames;   // List test case names during run        [UT_SHOW_NAMES]
-    int  minGpus;     // Set the minimum number of GPUs to use  [UT_MIN_GPUS]
-    int  maxGpus;     // Set the maximum number of GPUs to use  [UT_MAX_GPUS]
-    int  processMask; // Filter single/multi process            [UT_PROCESS_MASK]
-    bool verbose;     // Show verbose TestBed output for debug  [UT_VERBOSE]
-    int  printValues; // Print out input/output/expected arrays [UT_PRINT_VALUES]
-    int  maxRanksPerGpu; // Number of ranks using the same GPU  [UT_MAX_RANKS_PER_GPU]
+    bool showNames;      // List test case names during run        [UT_SHOW_NAMES]
+    int  minGpus;        // Set the minimum number of GPUs to use  [UT_MIN_GPUS]
+    int  maxGpus;        // Set the maximum number of GPUs to use  [UT_MAX_GPUS]
+    bool onlyPow2Gpus;   // Only allow power-of-2 # of GPUs        [UT_POW2_GPUS]
+    int  processMask;    // Filter single/multi process            [UT_PROCESS_MASK]
+    bool verbose;        // Show verbose TestBed output for debug  [UT_VERBOSE]
+    int  printValues;    // Print out input/output/expected arrays [UT_PRINT_VALUES]
+    int  maxRanksPerGpu; // Number of ranks using the same GPU     [UT_MAX_RANKS_PER_GPU]
+    bool showTiming;     // Show timing per case at end            [UT_SHOW_TIMING]
+    bool useInteractive; // Run in interactive mode                [UT_INTERACTIVE]
 
     // Constructor that parses and collects environment variables
     EnvVars();
@@ -32,11 +35,16 @@ namespace RcclUnitTesting
     std::vector<ncclRedOp_t>    const& GetAllSupportedRedOps();
     std::vector<ncclDataType_t> const& GetAllSupportedDataTypes();
 
-    static void ShowConfig();
+    std::vector<int>            const& GetNumGpusList();
+    std::vector<int>            const& GetIsMultiProcessList();
+    void ShowConfig();
 
   protected:
-    std::vector<ncclRedOp_t>    redOps;    // Supported reduction ops [UT_REDOPS]
-    std::vector<ncclDataType_t> dataTypes; // Support datatypes       [UT_DATATYPES]
+    std::vector<ncclRedOp_t>    redOps;             // Supported reduction ops [UT_REDOPS]
+    std::vector<ncclDataType_t> dataTypes;          // Support datatypes       [UT_DATATYPES]
+    std::vector<int>            numGpusList;        // List of # Gpus to use   [UT_MIN_GPUS/UT_MAX_GPUS/UT_POW2_GPUS]
+    std::vector<int>            isMultiProcessList; // Single or multi process [UT_PROCESS_MASK]
+    int                         numDetectedGpus;
 
     // Helper functions to parse environment variables
     int GetEnvVar(std::string const varname, int defaultValue);
