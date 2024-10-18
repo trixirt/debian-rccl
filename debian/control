@@ -18,15 +18,6 @@ Build-Depends: debhelper-compat (= 13),
                liboam-dev,
                chrpath <!nocheck>,
                libgtest-dev <!nocheck>
-Build-Depends-Indep: dh-sequence-sphinxdoc <!nodoc>,
-               doxygen <!nodoc>,
-               python3-breathe <!nodoc>,
-               python3-sphinx <!nodoc>,
-               python3-sphinx-rtd-theme <!nodoc>,
-               libjs-jquery <!nodoc>,
-               libjs-mathjax <!nodoc>,
-               libjs-sphinxdoc <!nodoc>,
-               libjs-underscore <!nodoc>
 Rules-Requires-Root: no
 
 Package: librccl1
@@ -48,7 +39,6 @@ Section: libdevel
 Architecture: amd64 arm64 ppc64el
 Depends: librccl1 (= ${binary:Version}),${misc:Depends}, ${shlibs:Depends},
          libamdhip64-dev,
-Suggests: librccl-doc
 Description: ROCm Communication Collectives Library - headers
  RCCL (pronounced "Rickle") is a library of collective communication routines
  built on the AMD ROCm platform and optimized for discrete AMD GPUs. It
@@ -76,21 +66,3 @@ Description: ROCm Communication Collectives Library - tests
  library is functioning correctly. These binaries are only used to check whether
  RCCL works correctly on a given GPU, so generally speaking, users probably
  don't need this package.
-
-Package: librccl-doc
-Section: doc
-Architecture: all
-Multi-Arch: foreign
-Build-Profiles: <!nodoc>
-Depends: ${misc:Depends},
-         ${sphinxdoc:Depends},
-         libjs-mathjax,
-Description: ROCm Communication Collectives Library - documentation
- RCCL (pronounced "Rickle") is a library of collective communication routines
- built on the AMD ROCm platform and optimized for discrete AMD GPUs. It
- implements routines such as all-reduce, all-gather, reduce, broadcast,
- reduce-scatter, gather, scatter and all-to-all. The library is optimized for
- high bandwidth over channels including PCIe, xGMI, InfiniBand Verbs or TCP/IP
- sockets and supports an arbitrary number of GPUs.
- .
- This package provides the RCCL documentation.
