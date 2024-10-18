@@ -1,3 +1,9 @@
+rccl (6.0.2-1) UNRELEASED; urgency=medium
+
+  * New upstream version 6.0.2-1
+
+ -- Tom Rix <Tom.Rix@amd.com>  Fri, 18 Oct 2024 16:51:56 +0000
+
 rccl (5.4.3-3) unstable; urgency=medium
 
   * Migrate to unstable.
