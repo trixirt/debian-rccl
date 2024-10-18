@@ -10,7 +10,11 @@
 
 namespace {
   template<typename T, typename RedOp, typename Proto>
+#if defined(USE_INDIRECT_FUNCTION_CALL) && !defined(__gfx940__) && !defined(__gfx941__) && !defined(__gfx942__)
+  __device__ void runRing(ncclWorkElem *args) {
+#else
   __device__ __attribute__((noinline)) void runRing(ncclWorkElem *args) {
+#endif
     const int tid = threadIdx.x;
     const int nthreads = args->nWarps*WARP_SIZE;
     const int bid = args->bid;
@@ -47,8 +51,8 @@ namespace {
       if (num_hops == 0 && args->sendbuff != args->recvbuff) {
         const T* sendbuff = (const T*)args->sendbuff + send_offset;
         T* recvbuff = (T *)args->recvbuff + recv_offset;
-        ReduceOrCopyMulti<COLL_UNROLL, RedOp, T, 1, 1, 1, 1, 0>(
-            tid, nthreads, nullptr, false, 1, &sendbuff, 1, &recvbuff, send_recv_size);
+        reduceCopy<COLL_UNROLL, RedOp, T, 0,1, 1, 0, 1, 1, 0>(
+            tid, nthreads, 0, nullptr, false, 1, (void **)&sendbuff, 1, (void **)&recvbuff, send_recv_size);
       } else {
         for (ssize_t prims_offset = 0; prims_offset < send_recv_size; prims_offset += prims_size) {
           const int prims_nelem = min(prims_size, send_recv_size - prims_offset);

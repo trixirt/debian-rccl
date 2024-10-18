@@ -1,4 +1,6 @@
 #!/usr/bin/env groovy
+
+// Copyright (c) 2020-2023 Advanced Micro Devices, Inc. All rights reserved.
 // This shared library is available at https://github.com/ROCmSoftwarePlatform/rocJENKINS/
 @Library('rocJenkins@pong') _
 
@@ -15,8 +17,8 @@ def runCI =
 
     def prj  = new rocProject('rccl', 'PreCheckin')
 
-    prj.timeout.test = 1440
-    prj.paths.build_command = './install.sh -t '
+    prj.timeout.test = 300
+    prj.paths.build_command = './install.sh -t --fast'
 
     // Define test architectures, optional rocm version argument is available
     def nodes = new dockerNodes(nodeDetails, jobName, prj)
@@ -37,7 +39,7 @@ def runCI =
     {
         platform, project->
 
-        commonGroovy.runTestCommand(platform, project, "-*ManagedMem")
+        commonGroovy.runTestCommand(platform, project, "*", "UT_POW2_GPUS=1")
     }
 
     def packageCommand =

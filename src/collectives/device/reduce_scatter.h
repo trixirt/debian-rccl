@@ -11,7 +11,11 @@
 
 namespace {
   template<typename T, typename RedOp, typename Proto>
+#if defined(USE_INDIRECT_FUNCTION_CALL) && !defined(__gfx940__) && !defined(__gfx941__) && !defined(__gfx942__)
+  __device__ void runRing(ncclWorkElem *args) {
+#else
   __device__ __attribute__((noinline)) void runRing(ncclWorkElem *args) {
+#endif
     const int tid = threadIdx.x;
     const int nthreads = args->nWarps*WARP_SIZE;
     const int bid = args->bid;
@@ -26,7 +30,7 @@ namespace {
     const ssize_t size = args->count;
 
     Primitives<T, RedOp, FanSymmetric<1>, 0, Proto, 0>
-      prims(tid, nthreads, &ring->prev, &ring->next, args->sendbuff, args->recvbuff, args->redOpArg, args->connIndex << 16);
+      prims(tid, nthreads, &ring->prev, &ring->next, args->sendbuff, args->recvbuff, args->redOpArg, 0, args->connIndex, args->connIndex);
 
     for (ssize_t gridOffset = 0; gridOffset < size; gridOffset += loopSize) {
       ssize_t realChunkSize;
@@ -86,5 +90,47 @@ template<typename T, typename RedOp>
 struct RunWorkElement<ncclFuncReduceScatter, T, RedOp, NCCL_ALGO_RING, NCCL_PROTO_LL128> {
   __device__ __forceinline__ void run(ncclWorkElem *args) {
     runRing<T, RedOp, ProtoLL128>(args);
+  }
+};
+
+template<typename T, typename RedOp>
+struct RunWorkElement<ncclFuncReduceScatter, T, RedOp, NCCL_ALGO_NVLS, NCCL_PROTO_SIMPLE> {
+  __device__ __forceinline__ void run(ncclWorkElem *args) {
+    const int tid = threadIdx.x;
+    const int bid = args->bid;
+    const int nChannels = args->nChannels;
+    struct ncclNvls* nvls = &ncclShmem.channel.nvls;
+    const ssize_t chunkSize = int(args->lastChunkSize);
+    const ssize_t size = args->count;
+    const ssize_t loopSize = nChannels*chunkSize;
+
+    const int nThreadsScatter = 128 + WARP_SIZE;
+    const int nThreadsReduce = 384;
+    const int tidEndScatter = nThreadsScatter;
+    const int tidEndReduce = tidEndScatter + nThreadsReduce;
+
+    using Proto = ProtoSimple<1, 1>;
+
+    if (tid < tidEndScatter) {
+      // Scatter
+      Primitives<T, RedOp, FanAsymmetric<0, NCCL_MAX_NVLS_ARITY>, /*Direct=*/0, Proto, 0>
+        prims(tid, nThreadsScatter, NULL, nvls->up, args->sendbuff, NULL,
+            args->redOpArg, 0*Proto::MaxGroupWidth, 0, 0);
+      for (ssize_t gridOffset = 0; gridOffset < size; gridOffset += loopSize) {
+        ssize_t offset = gridOffset + bid*chunkSize;
+        int nelem = min(chunkSize, size-offset);
+        prims.scatter(offset, nvls->nHeads*size, nelem, size, -1, 0);
+      }
+    } else if (tid < tidEndReduce) {
+      // Reduce through NVLS
+      Primitives<T, RedOp, FanAsymmetric<1, 0>, /*Direct=*/0, Proto, 0>
+        prims(tid-tidEndScatter, nThreadsReduce, &nvls->down, NULL, NULL, args->recvbuff,
+           args->redOpArg, 3*Proto::MaxGroupWidth, 1, 1);
+      for (ssize_t gridOffset = 0; gridOffset < size; gridOffset += loopSize) {
+        ssize_t offset = gridOffset + bid*chunkSize;
+        int nelem = min(chunkSize, size-offset);
+        prims.recv(offset, nelem);
+      }
+    }
   }
 };

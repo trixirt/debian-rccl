@@ -20,6 +20,24 @@
     }                                                                   \
   }
 
+#define CHILD_NCCL_CALL_NON_BLOCKING(msg, localRank)                  \
+  {                                                                   \
+    unsigned long int loop_counter = 0;                               \
+    ncclResult_t ncclAsyncErr;                                        \
+    loop_counter = 0;                                                 \
+    do                                                                \
+    {                                                                 \
+      loop_counter++;                                                 \
+      if (loop_counter == MAX_LOOP_COUNTER) break;                    \
+      ncclCommGetAsyncError(this->comms[localRank], &ncclAsyncErr);   \
+    } while(ncclAsyncErr == ncclInProgress);                          \
+    if (ncclAsyncErr != ncclSuccess)                                  \
+    {                                                                 \
+      ERROR("Child process %d fails NCCL call %s with code %d\n", this->childId, msg, ncclAsyncErr);  \
+      return TEST_FAIL;                                               \
+    }                                                                 \
+  }
+
 #define PIPE_READ(val) \
   if (read(childReadFd, &val, sizeof(val)) != sizeof(val)) return TEST_FAIL;
 
@@ -81,7 +99,7 @@ namespace RcclUnitTesting
       case CHILD_VALIDATE_RESULTS: status = ValidateResults();    break;
       case CHILD_DEALLOCATE_MEM  : status = DeallocateMem();      break;
       case CHILD_DESTROY_COMMS   : status = DestroyComms();       break;
-      case CHILD_STOP            : status = Stop();               break;
+      case CHILD_STOP            : goto stop;
       default: exit(0);
       }
 
@@ -94,6 +112,7 @@ namespace RcclUnitTesting
         break;
       }
     }
+  stop:
     if (verbose) INFO("Child %d exiting execution loop\n", this->childId);
 
     // Close child ends of pipe
@@ -126,13 +145,16 @@ namespace RcclUnitTesting
     PIPE_READ(this->totalRanks);
     PIPE_READ(this->rankOffset);
     PIPE_READ(this->numCollectivesInGroup);
+    PIPE_READ(this->useBlocking);
     bool useMultiRankPerGpu;
     PIPE_READ(useMultiRankPerGpu);
+    PIPE_READ(this->numStreamsPerGroup);
 
     // Read the GPUs this child uses and prepare storage for collective args / datasets
     int numGpus;
     PIPE_READ(numGpus);
     this->deviceIds.resize(numGpus);
+    this->streams.clear();
     this->streams.resize(numGpus);
     this->collArgs.resize(numGpus);
     for (int i = 0; i < numGpus; i++)
@@ -140,6 +162,7 @@ namespace RcclUnitTesting
       PIPE_READ(this->deviceIds[i]);
       this->collArgs[i].clear();
       this->collArgs[i].resize(numCollectivesInGroup);
+      this->streams[i].resize(numStreamsPerGroup);
     }
 
     // Initialize communicators
@@ -161,25 +184,36 @@ namespace RcclUnitTesting
         break;
       }
 
-      if (hipStreamCreate(&this->streams[localRank]) != hipSuccess)
+      for (int i = 0; i < this->numStreamsPerGroup; i++)
       {
-        ERROR("Rank %d on child %d unable to create stream for GPU %d\n", globalRank, this->childId, currGpu);
-        status = TEST_FAIL;
-        break;
+        if (hipStreamCreate(&(this->streams[localRank][i])) != hipSuccess)
+        {
+          ERROR("Rank %d on child %d unable to create stream %d for GPU %d\n", globalRank, this->childId, i, currGpu);
+          status = TEST_FAIL;
+          break;
+        }
       }
 
       if (useMultiRankPerGpu)
       {
-	if (ncclCommInitRankMulti(&this->comms[localRank], this->totalRanks, id, globalRank, globalRank) != ncclSuccess)
+        //if (ncclCommInitRankMulti(&this->comms[localRank], this->totalRanks, id, globalRank, globalRank) != ncclSuccess)
         {
-	  ERROR("Rank %d on child %d unable to call ncclCommInitRankMulti\n", globalRank, this->childId);
-	  status = TEST_FAIL;
-	  break;
-	}
+          ERROR("Rank %d on child %d unable to call ncclCommInitRankMulti\n", globalRank, this->childId);
+          status = TEST_FAIL;
+          break;
+        }
+      }
+      else if (this->useBlocking == false)
+      {
+        // When non-blocking communicator is desired call ncclCommInitRankConfig with appropriate flag
+        ncclConfig_t config = NCCL_CONFIG_INITIALIZER;
+        config.blocking = 0;
+        ncclCommInitRankConfig(&this->comms[localRank], this->totalRanks, id, globalRank, &config);
+        CHILD_NCCL_CALL_NON_BLOCKING("ncclCommGetAsyncErrorInitRankConfig", localRank);
       }
       else
       {
-	if (ncclCommInitRank(&this->comms[localRank], this->totalRanks, id, globalRank) != ncclSuccess)
+        if (ncclCommInitRank(&this->comms[localRank], this->totalRanks, id, globalRank) != ncclSuccess)
         {
           ERROR("Rank %d on child %d unable to call ncclCommInitRank\n", globalRank, this->childId);
           status = TEST_FAIL;
@@ -187,10 +221,29 @@ namespace RcclUnitTesting
         }
       }
     }
+
     if (status == TEST_SUCCESS)
     {
-      CHILD_NCCL_CALL(ncclGroupEnd(), "ncclGroupStart");
+      // Check if the communicator is non-blocking
+      if (this->useBlocking == false)
+      {
+        // handle the ncclGroupEnd in case of non-blocking communication
+        ncclResult_t Group_End_state = ncclGroupEnd();
+        if (Group_End_state != ncclSuccess)
+        {
+          for (int localRank = 0; localRank < numGpus; ++localRank)
+          {
+            CHILD_NCCL_CALL_NON_BLOCKING("ncclCommGetAsyncErrorGroupEnd", localRank);
+          }
+        }
+      }
+      else
+      {
+        // In case of blocking communication just call ncclGroupEnd
+        CHILD_NCCL_CALL(ncclGroupEnd(), "ncclGroupEnd");
+      }
     }
+
     if (this->verbose) INFO("Child %d finishes InitComms() [%s]\n",
                             this->childId, status == TEST_SUCCESS ? "SUCCESS" : "FAIL");
     return status;
@@ -207,6 +260,7 @@ namespace RcclUnitTesting
     ncclDataType_t  dataType;
     size_t          numInputElements;
     size_t          numOutputElements;
+    int             streamIdx;
     OptionalColArgs options;
 
     PIPE_READ(globalRank);
@@ -215,6 +269,7 @@ namespace RcclUnitTesting
     PIPE_READ(dataType);
     PIPE_READ(numInputElements);
     PIPE_READ(numOutputElements);
+    PIPE_READ(streamIdx);
     PIPE_READ(options);
 
     if (globalRank < this->rankOffset || (this->rankOffset + comms.size() <= globalRank))
@@ -234,6 +289,7 @@ namespace RcclUnitTesting
                                    this->deviceIds[localRank],
                                    funcType, dataType,
                                    numInputElements, numOutputElements,
+                                   streamIdx,
                                    options));
         if (this->verbose) INFO("Rank %d on child %d sets collective %d [%s]\n",
                                 globalRank, this->childId, collIdx,
@@ -337,6 +393,9 @@ namespace RcclUnitTesting
 
   ErrCode TestBedChild::ExecuteCollectives()
   {
+    bool useHipGraph = false;
+    PIPE_READ(useHipGraph);
+
     int numRanksToExecute, tempRank;
     std::vector<int> ranksToExecute = {};
     PIPE_READ(numRanksToExecute);
@@ -345,7 +404,43 @@ namespace RcclUnitTesting
       PIPE_READ(tempRank);
       ranksToExecute.push_back(tempRank - this->rankOffset);
     }
-    if (this->verbose) INFO("Child %d begins ExecuteCollectives()\n", this->childId);
+    if (this->verbose) INFO("Child %d begins ExecuteCollectives() %s\n", this->childId, useHipGraph ? "(using hipGraphs)" : "");
+
+    // Determine which local ranks to execute on
+    std::vector<int> localRanksToExecute;
+    for (int localRank = 0; localRank < this->deviceIds.size(); ++localRank)
+    {
+      // If ranksToExeute is empty, execute all local ranks belonging to this child
+      if (!ranksToExecute.empty() &&
+          (std::count(ranksToExecute.begin(), ranksToExecute.end(), localRank) == 0)) continue;
+      localRanksToExecute.push_back(localRank);
+    }
+
+    numRanksToExecute = (int)localRanksToExecute.size();
+    std::vector<std::vector<hipGraph_t>> graphs;
+    std::vector<std::vector<hipGraphExec_t>> graphExec;
+    graphs.resize(numRanksToExecute);
+    graphExec.resize(numRanksToExecute);
+    for (int i = 0; i < numRanksToExecute; i++)
+    {
+      graphs[i].resize(this->numStreamsPerGroup);
+      graphExec[i].resize(this->numStreamsPerGroup);
+    }
+
+    // Start HIP graph stream capture if requested
+    if (useHipGraph)
+    {
+      for (int localRank : localRanksToExecute)
+      {
+        CHECK_HIP(hipSetDevice(this->deviceIds[localRank]));
+        if (this->verbose) INFO("Capturing stream for rank %d\n", localRank);
+        CHECK_HIP(hipSetDevice(this->deviceIds[localRank]));
+        for (int i = 0; i < this->numStreamsPerGroup; i++)
+        {
+          CHECK_HIP(hipStreamBeginCapture(this->streams[localRank][i], hipStreamCaptureModeRelaxed));
+        }
+      }
+    }
 
     // Start group call
     CHILD_NCCL_CALL(ncclGroupStart(), "ncclGroupStart");
@@ -354,16 +449,13 @@ namespace RcclUnitTesting
     for (int collId = 0; collId < this->numCollectivesInGroup; ++collId)
     {
       // Loop over all local ranks
-      for (int localRank = 0; localRank < this->deviceIds.size(); ++localRank)
+      for (int localRank : localRanksToExecute)
       {
-        // If ranks to execute is empty, execute all ranks belonging to child
-        if (!ranksToExecute.empty() && (std::count(ranksToExecute.begin(), ranksToExecute.end(), localRank) == 0)) continue;
-
         CHECK_HIP(hipSetDevice(this->deviceIds[localRank]));
 
         CollectiveArgs const& collArg = this->collArgs[localRank][collId];
 
-        if (this->printValues)
+        if (this->printValues && !useHipGraph)
         {
           int const numInputElementsToPrint = (this->printValues < 0 ? collArg.numInputElements : this->printValues);
           PtrUnion inputCpu;
@@ -390,7 +482,7 @@ namespace RcclUnitTesting
                                         collArg.dataType,
                                         collArg.options.root,
                                         this->comms[localRank],
-                                        this->streams[localRank]),
+                                        this->streams[localRank][collArg.streamIdx]),
                           "ncclBroadcast");
           break;
         case ncclCollReduce:
@@ -401,7 +493,7 @@ namespace RcclUnitTesting
                                      collArg.options.redOp,
                                      collArg.options.root,
                                      this->comms[localRank],
-                                     this->streams[localRank]),
+                                     this->streams[localRank][collArg.streamIdx]),
                           "ncclReduce");
           break;
         case ncclCollAllGather:
@@ -410,7 +502,7 @@ namespace RcclUnitTesting
                                         collArg.numInputElements,
                                         collArg.dataType,
                                         this->comms[localRank],
-                                        this->streams[localRank]),
+                                        this->streams[localRank][collArg.streamIdx]),
                           "ncclAllGather");
           break;
         case ncclCollReduceScatter:
@@ -420,7 +512,7 @@ namespace RcclUnitTesting
                                             collArg.dataType,
                                             collArg.options.redOp,
                                             this->comms[localRank],
-                                            this->streams[localRank]),
+                                            this->streams[localRank][collArg.streamIdx]),
                           "ncclReduceScatter");
           break;
         case ncclCollAllReduce:
@@ -430,7 +522,7 @@ namespace RcclUnitTesting
                                         collArg.dataType,
                                         collArg.options.redOp,
                                         this->comms[localRank],
-                                        this->streams[localRank]),
+                                        this->streams[localRank][collArg.streamIdx]),
                           "ncclAllReduce");
           break;
         case ncclCollGather:
@@ -440,7 +532,7 @@ namespace RcclUnitTesting
                                      collArg.dataType,
                                      collArg.options.root,
                                      this->comms[localRank],
-                                     this->streams[localRank]),
+                                     this->streams[localRank][collArg.streamIdx]),
                           "ncclGather");
           break;
         case ncclCollScatter:
@@ -450,7 +542,7 @@ namespace RcclUnitTesting
                                       collArg.dataType,
                                       collArg.options.root,
                                       this->comms[localRank],
-                                      this->streams[localRank]),
+                                      this->streams[localRank][collArg.streamIdx]),
                           "ncclScatter");
           break;
         case ncclCollAllToAll:
@@ -459,7 +551,7 @@ namespace RcclUnitTesting
                                        collArg.numInputElements / collArg.totalRanks,
                                        collArg.dataType,
                                        this->comms[localRank],
-                                       this->streams[localRank]),
+                                       this->streams[localRank][collArg.streamIdx]),
                           "ncclAllToAll");
           break;
         case ncclCollAllToAllv:
@@ -471,7 +563,7 @@ namespace RcclUnitTesting
                                         collArg.options.rdispls + (this->rankOffset + localRank)*this->totalRanks,
                                         collArg.dataType,
                                         this->comms[localRank],
-                                        this->streams[localRank]),
+                                        this->streams[localRank][collArg.streamIdx]),
                           "ncclAllToAllv");
           break;
         case ncclCollSend:
@@ -480,7 +572,7 @@ namespace RcclUnitTesting
                                    collArg.dataType,
                                    collArg.options.root,
                                    this->comms[localRank],
-                                   this->streams[localRank]),
+                                   this->streams[localRank][collArg.streamIdx]),
                           "ncclSend");
           break;
         case ncclCollRecv:
@@ -489,33 +581,114 @@ namespace RcclUnitTesting
                                    collArg.dataType,
                                    collArg.options.root,
                                    this->comms[localRank],
-                                   this->streams[localRank]),
+                                   this->streams[localRank][collArg.streamIdx]),
                           "ncclRecv");
           break;
         default:
           ERROR("Unknown func type %d\n", collArg.funcType);
           return TEST_FAIL;
         }
+        if (this->useBlocking == false)
+        {
+          CHILD_NCCL_CALL_NON_BLOCKING("ncclCommGetAsyncErrorExecuteCollectives", localRank);
+        }
+      }
+
+    }
+    // End group call
+    if (this->useBlocking == false)
+    {
+      // handle the ncclGroupEnd in case of non-blocking communication
+      ncclResult_t Group_End_state = ncclGroupEnd();
+      if (Group_End_state != ncclSuccess)
+      {
+        for (int localRank = 0; localRank < this->comms.size(); ++localRank)
+        {
+          CHECK_HIP(hipSetDevice(this->deviceIds[localRank]));
+          CHILD_NCCL_CALL_NON_BLOCKING("ncclCommGetAsyncErrorGroupEnd", localRank);
+        }
       }
     }
+    else
+    {
+      // In case of blocking communication just call ncclGroupEnd
+      CHILD_NCCL_CALL(ncclGroupEnd(), "ncclGroupEnd");
+    }
 
-    // End group call
-    CHILD_NCCL_CALL(ncclGroupEnd(), "ncclGroupEnd");
+    // Instantiate and launch HIP graph if requested
+    if (useHipGraph)
+    {
+      for (int localRank : localRanksToExecute)
+      {
+        if (this->verbose) INFO("Ending stream capture for rank %d\n", localRank);
+        CHECK_HIP(hipSetDevice(this->deviceIds[localRank]));
+        for (int i = 0; i < this->numStreamsPerGroup; i++)
+        {
+          CHECK_HIP(hipStreamEndCapture(this->streams[localRank][i], &graphs[localRank][i]));
+
+          if (this->verbose)
+          {
+            size_t numNodes;
+            hipGraphNode_t* nodes;
+            CHECK_HIP(hipGraphGetNodes(graphs[localRank][i], nodes, &numNodes));
+            INFO("Graph for rank %d stream %d has %lu nodes\n", localRank, i, numNodes);
+          }
+        }
+
+        if (this->verbose) INFO("Instantiating executable graph for rank %d\n", localRank);
+        for (int i = 0; i < this->numStreamsPerGroup; i++)
+        {
+          CHECK_HIP(hipGraphInstantiate(&graphExec[localRank][i], graphs[localRank][i], NULL, NULL, 0));
+        }
+      }
+
+      for (int localRank : localRanksToExecute)
+      {
+        if (this->verbose) INFO("Launch graph for rank %d\n", localRank);
+        CHECK_HIP(hipSetDevice(this->deviceIds[localRank]));
+        for (int i = 0; i < this->numStreamsPerGroup; i++)
+        {
+          CHECK_HIP(hipGraphLaunch(graphExec[localRank][i], this->streams[localRank][i]));
+        }
+      }
+    }
+    else
+    {
+      if (this->verbose)
+        INFO("Child %d submits group call.  Waiting for completion\n", this->childId);
+    }
 
     // Synchronize
-    if (this->verbose) INFO("Child %d submits group call.  Waiting for completion\n", this->childId);
-    for (int localRank = 0; localRank < this->streams.size(); ++localRank)
+    for (int localRank : localRanksToExecute)
     {
-      CHECK_HIP(hipStreamSynchronize(this->streams[localRank]));
+      if (this->verbose) INFO("Starting synchronization for rank %d\n", localRank);
+      CHECK_HIP(hipSetDevice(this->deviceIds[localRank]));
+      for (int i = 0; i < this->numStreamsPerGroup; i++)
+        CHECK_HIP(hipStreamSynchronize(this->streams[localRank][i]));
+    }
+
+    // Destroy graphs
+    if (useHipGraph)
+    {
+      for (int localRank : localRanksToExecute)
+      {
+        if (this->verbose) INFO("Destroying graphs for rank %d\n", localRank);
+        CHECK_HIP(hipSetDevice(this->deviceIds[localRank]));
+        for (int i = 0; i < this->numStreamsPerGroup; i++)
+        {
+          CHECK_HIP(hipGraphDestroy(graphs[localRank][i]));
+          CHECK_HIP(hipGraphExecDestroy(graphExec[localRank][i]));
+        }
+      }
     }
 
     if (this->printValues)
     {
       for (int collId = 0; collId < this->numCollectivesInGroup; ++collId)
-        for (int localRank = 0; localRank < this->deviceIds.size(); ++localRank)
+        for (int localRank : localRanksToExecute)
         {
           CollectiveArgs const& collArg = this->collArgs[localRank][collId];
-
+          CHECK_HIP(hipSetDevice(this->deviceIds[localRank]));
           int numOutputElementsToPrint = (this->printValues < 0 ? collArg.numOutputElements : this->printValues);
           size_t const numOutputBytes = numOutputElementsToPrint * DataTypeToBytes(collArg.dataType);
           CHECK_HIP(hipMemcpy(collArg.outputCpu.ptr, collArg.outputGpu.ptr, numOutputBytes, hipMemcpyDeviceToHost));
@@ -615,20 +788,34 @@ namespace RcclUnitTesting
     // Release comms
     for (int i = 0; i < this->comms.size(); ++i)
     {
+      // Check if the communicator is non-blocking
+      if (this->useBlocking == false)
+      {
+        // handle the non-blocking case
+        ncclCommFinalize(this->comms[i]);
+        CHILD_NCCL_CALL_NON_BLOCKING("ncclCommGetAsyncErrorCommFinalize", i);
+      }
+      else
+      {
+        // In case of blocking just call Finalize
+        CHILD_NCCL_CALL(ncclCommFinalize(this->comms[i]), "ncclCommFinalize");
+      }
+    }
+
+    for (int i = 0; i < this->comms.size(); ++i)
+    {
       CHILD_NCCL_CALL(ncclCommDestroy(this->comms[i]), "ncclCommDestroy");
     }
     for (int i = 0; i < this->streams.size(); ++i)
     {
-      CHECK_HIP(hipStreamDestroy(this->streams[i]));
+      for (int j = 0; j < this->numStreamsPerGroup; j++)
+      {
+        CHECK_HIP(hipStreamDestroy(this->streams[i][j]));
+      }
     }
     this->comms.clear();
     this->streams.clear();
     if (this->verbose) INFO("Child %d finishes DestroyComms\n", this->childId);
-    return TEST_SUCCESS;
-  }
-
-  ErrCode TestBedChild::Stop()
-  {
     return TEST_SUCCESS;
   }
 }

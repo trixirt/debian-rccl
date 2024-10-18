@@ -1,6 +1,5 @@
 /*************************************************************************
  * Copyright (c) 2016-2022, NVIDIA CORPORATION. All rights reserved.
- * Modifications Copyright (c) 2019-2022 Advanced Micro Devices, Inc. All rights reserved.
  *
  * See LICENSE.txt for license information
  ************************************************************************/
@@ -16,7 +15,7 @@ static int pid = -1;
 static char hostname[1024];
 thread_local int ncclDebugNoWarn = 0;
 char ncclLastError[1024] = ""; // Global string for the last error in human readable form
-uint64_t ncclDebugMask = NCCL_INIT; // Default debug sub-system mask is INIT
+uint64_t ncclDebugMask = NCCL_INIT|NCCL_ENV; // Default debug sub-system mask is INIT and ENV
 FILE *ncclDebugFile = stdout;
 pthread_mutex_t ncclDebugLock = PTHREAD_MUTEX_INITIALIZER;
 std::chrono::steady_clock::time_point ncclEpoch;
@@ -75,6 +74,10 @@ void ncclDebugInit() {
         mask = NCCL_ALLOC;
       } else if (strcasecmp(subsys, "CALL") == 0) {
         mask = NCCL_CALL;
+      } else if (strcasecmp(subsys, "PROXY") == 0) {
+        mask = NCCL_PROXY;
+      } else if (strcasecmp(subsys, "NVLS") == 0) {
+        mask = NCCL_NVLS;
       } else if (strcasecmp(subsys, "ALL") == 0) {
         mask = NCCL_ALL;
       }
@@ -160,7 +163,7 @@ void ncclDebugLog(ncclDebugLogLevel level, unsigned long flags, const char *file
 
   int cudaDev;
   if (!(level == NCCL_LOG_TRACE && flags == NCCL_CALL)) {
-    hipGetDevice(&cudaDev);
+    cudaGetDevice(&cudaDev);
   }
 
   char buffer[1024];

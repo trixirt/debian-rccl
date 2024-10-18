@@ -11,28 +11,47 @@ The collective operations are implemented using ring and tree algorithms and hav
 ## Requirements
 
 1. ROCm supported GPUs
-2. ROCm stack installed on the system (HIP runtime & HCC or HIP-Clang)
+2. ROCm stack installed on the system (HIP runtime & HIP-Clang)
 
 ## Quickstart RCCL Build
 
-RCCL directly depends on HIP runtime, plus the HCC C++ compiler or the HIP-Clang compiler which are part of the ROCm software stack.
+RCCL directly depends on HIP runtime plus the HIP-Clang compiler, which are part of the ROCm software stack.
 For ROCm installation instructions, see https://github.com/RadeonOpenCompute/ROCm.
 
 The root of this repository has a helper script 'install.sh' to build and install RCCL on Ubuntu with a single command.  It does not take a lot of options and hard-codes configuration that can be specified through invoking cmake directly, but it's a great way to get started quickly and can serve as an example of how to build/install.
 
-*  `./install.sh` -- builds library including unit tests
-*  `./install.sh -i` -- builds and installs the library to /opt/rocm/rccl; installation path can be changed with --prefix argument (see below.)
-*  `./install.sh -d` -- installs all necessary dependencies for RCCL.  Should be re-invoked if the build folder is removed.
-*  `./install.sh -h` -- shows help
-*  `./install.sh -t` -- builds library including unit tests
-*  `./install.sh -r` -- runs unit tests (must be already built)
-*  `./install.sh -p` -- builds RCCL package
-*  `./install.sh -s` -- builds RCCL as a static library (default: shared)
-*  `./install.sh -hcc` -- builds RCCL with hcc compiler; note that hcc is now deprecated. (default:hip-clang)
-*  `./install.sh --prefix` -- specify custom path to install RCCL to (default:/opt/rocm)
+```shell
+./install.sh --help
+
+ Options:
+       --address-sanitizer     Build with address sanitizer enabled
+       --build_allreduce_only  Build only AllReduce + sum + float kernel
+    -d|--dependencies          Install RCCL depdencencies
+       --debug                 Build debug library
+       --enable_backtrace      Build with custom backtrace support
+       --disable-colltrace     Build without collective trace
+       --disable-msccl-kernel  Build without MSCCL kernels
+    -f|--fast                  Quick-build RCCL (local gpu arch only, no backtrace, and collective trace support)
+    -h|--help                  Prints this help message
+    -i|--install               Install RCCL library (see --prefix argument below)
+    -j|--jobs                  Specify how many parallel compilation jobs to run (16 by default)
+    -l|--local_gpu_only        Only compile for local GPU architecture
+       --no_clean              Don't delete files if they already exist
+       --npkit-enable          Compile with npkit enabled
+    -p|--package_build         Build RCCL package
+       --prefix                Specify custom directory to install RCCL to (default: /opt/rocm)
+       --rm-legacy-include-dir Remove legacy include dir Packaging added for file/folder reorg backward compatibility
+       --run_tests_all         Run all rccl unit tests (must be built already)
+    -r|--run_tests_quick       Run small subset of rccl unit tests (must be built already)
+       --static                Build RCCL as a static library instead of shared library
+    -t|--tests_build           Build rccl unit tests, but do not run
+       --time-trace            Plot the build time of RCCL
+       --verbose               Show compile commands
+```
 
 ## Manual build
-#### To build the library :
+
+### To build the library :
 
 ```shell
 $ git clone https://github.com/ROCmSoftwarePlatform/rccl.git
@@ -40,7 +59,7 @@ $ cd rccl
 $ mkdir build
 $ cd build
 $ CXX=/opt/rocm/bin/hipcc cmake -DCMAKE_PREFIX_PATH=/opt/rocm/ ..
-$ make -j
+$ make -j 16      # Or some other suitable number of parallel jobs
 ```
 You may substitute an installation path of your own choosing by passing CMAKE_INSTALL_PREFIX. For example:
 ```shell
@@ -48,7 +67,7 @@ $ CXX=/opt/rocm/bin/hipcc cmake -DCMAKE_PREFIX_PATH=/opt/rocm/ -DCMAKE_INSTALL_P
 ```
 Note: ensure rocm-cmake is installed, `apt install rocm-cmake`.
 
-#### To build the RCCL package and install package :
+### To build the RCCL package and install package :
 
 Assuming you have already cloned this repository and built the library as shown in the previous section:
 
@@ -61,21 +80,22 @@ $ sudo dpkg -i *.deb
 RCCL package install requires sudo/root access because it creates a directory called "rccl" under /opt/rocm/. This is an optional step and RCCL can be used directly by including the path containing librccl.so.
 
 ## Enabling peer-to-peer transport
+
 In order to enable peer-to-peer access on machines with PCIe-connected GPUs, the HSA environment variable HSA_FORCE_FINE_GRAIN_PCIE=1 is required to be set, on top of requiring GPUs that support peer-to-peer access and proper large BAR addressing support.
 
 ## Tests
 
-There are unit tests implemented with the Googletest framework in RCCL.  The unit tests require Googletest 1.10 or higher to build and execute properly (installed with the -d option to install.sh).
-To invoke the unit tests, go to the build folder, then the test subfolder, and execute the appropriate unit test executable(s).
+There are rccl unit tests implemented with the Googletest framework in RCCL.  The rccl unit tests require Googletest 1.10 or higher to build and execute properly (installed with the -d option to install.sh).
+To invoke the rccl unit tests, go to the build folder, then the test subfolder, and execute the appropriate rccl unit test executable(s).
 
-Unit test names are now of the format:
+rccl unit test names are now of the format:
 
     CollectiveCall.[Type of test]
 
-Filtering of unit tests should be done with environment variable and by passing the --gtest_filter command line flag, for example:
+Filtering of rccl unit tests should be done with environment variable and by passing the --gtest_filter command line flag, for example:
 
 ```shell
-UT_DATATYPES=ncclBfloat16 UT_REDOPS=prod ./UnitTests --gtest_filter="AllReduce.C*"
+UT_DATATYPES=ncclBfloat16 UT_REDOPS=prod ./rccl-UnitTests --gtest_filter="AllReduce.C*"
 ```
 will run only AllReduce correctness tests with float16 datatype. A list of available filtering environment variables appears at the top of every run. See "Running a Subset of the Tests" at https://chromium.googlesource.com/external/github.com/google/googletest/+/HEAD/googletest/docs/advanced.md for more information on how to form more advanced filters.
 
@@ -97,7 +117,19 @@ To manually analyze NPKit dump results, please leverage [npkit_trace_generator.p
 
 ## Library and API Documentation
 
-Please refer to the [Library documentation](https://rccl.readthedocs.io/) for current documentation.
+Please refer to the [RCCL Documentation Site](https://rocm.docs.amd.com/projects/rccl/en/latest/) for current documentation.
+
+### How to build documentation
+
+Run the steps below to build documentation locally.
+
+```
+cd docs
+
+pip3 install -r sphinx/requirements.txt
+
+python3 -m sphinx -T -E -b html -d _build/doctrees -D language=en . _build/html
+```
 
 ## Copyright
 

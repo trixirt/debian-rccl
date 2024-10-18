@@ -1,4 +1,5 @@
 #!/usr/bin/env groovy
+// Copyright (c) 2020-2023 Advanced Micro Devices, Inc. All rights reserved.
 // This shared library is available at https://github.com/ROCmSoftwarePlatform/rocJENKINS/
 @Library('rocJenkins@pong') _
 
@@ -9,14 +10,14 @@ import com.amd.project.*
 import com.amd.docker.*
 import java.nio.file.Path
 
-def runCI = 
+def runCI =
 {
     nodeDetails, jobName->
 
     def prj  = new rocProject('rccl', 'Extended')
 
-    prj.timeout.test = 1440
-    prj.paths.build_command = './install.sh -t '
+    prj.timeout.test = 600
+    prj.paths.build_command = './install.sh -t'
 
     // Define test architectures, optional rocm version argument is available
     def nodes = new dockerNodes(nodeDetails, jobName, prj)
@@ -32,25 +33,25 @@ def runCI =
         commonGroovy = load "${project.paths.project_src_prefix}/.jenkins/common.groovy"
         commonGroovy.runCompileCommand(platform, project, jobName)
     }
-    
+
     def testCommand =
     {
         platform, project->
 
-        commonGroovy.runTestCommand(platform, project, "*")
+        commonGroovy.runTestCommand(platform, project, "*", "")
     }
 
     def packageCommand =
     {
         platform, project->
-        
+
         commonGroovy.runPackageCommand(platform, project, jobName)
     }
 
     buildProject(prj, formatCheck, nodes.dockerArray, compileCommand, testCommand, packageCommand)
 }
 
-ci: { 
+ci: {
     String urlJobName = auxiliary.getTopJobName(env.BUILD_URL)
 
     def propertyList = ["compute-rocm-dkms-no-npi-hipclang":[pipelineTriggers([cron('0 1 * * 0')])]]
@@ -58,17 +59,17 @@ ci: {
     propertyList = auxiliary.appendPropertyList(propertyList)
 
     def jobNameList = ["compute-rocm-dkms-no-npi-hipclang":([centos8:['8gfx906']])]
-    
+
     jobNameList = auxiliary.appendJobNameList(jobNameList)
-    
-    propertyList.each 
+
+    propertyList.each
     {
         jobName, property->
         if (urlJobName == jobName)
             properties(auxiliary.addCommonProperties(property))
     }
 
-    jobNameList.each 
+    jobNameList.each
     {
         jobName, nodeDetails->
         if (urlJobName == jobName)
