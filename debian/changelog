@@ -1,3 +1,14 @@
+rccl (6.0.2-1~exp1) experimental; urgency=medium
+
+  * Fixup for 6.0.2
+  * d/patches: refresh
+  * d/librccl1-tests.install: some test changes
+  * d/symbols: update
+  * d/control: hipify needed in build
+  * Revert "Add librccl-doc package for documentation"
+
+ -- Tom Rix <Tom.Rix@amd.com>  Fri, 18 Oct 2024 16:51:56 +0000
+
 rccl (6.0.2-1) UNRELEASED; urgency=medium
 
   * New upstream version 6.0.2-1
