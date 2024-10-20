@@ -1,0 +1,25 @@
+From a4b01a7370eb1ddafc5878b2d098bbd3b2419623 Mon Sep 17 00:00:00 2001
+From: Tom Rix <Tom.Rix@amd.com>
+Date: Thu, 17 Oct 2024 13:06:36 +0000
+Subject: [PATCH] Do not force gpu target
+
+---
+ CMakeLists.txt | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index bc0a3facb39b..3764650a9654 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -63,7 +63,7 @@ else()
+   message(WARNING "Unable to check for supported GPU targets. Falling back to default GPUs")
+   set(SUPPORTED_GPUS ${DEFAULT_GPUS})
+ endif()
+-set(AMDGPU_TARGETS "${SUPPORTED_GPUS}" CACHE STRING "AMD GPU targets to compile for" FORCE)
++# set(AMDGPU_TARGETS "${SUPPORTED_GPUS}" CACHE STRING "AMD GPU targets to compile for" FORCE)
+ set(GPU_TARGETS "${AMDGPU_TARGETS}" CACHE STRING "GPU targets to compile for" FORCE)
+ message(STATUS "Compiling for ${GPU_TARGETS}")
+ 
+-- 
+2.45.2
+

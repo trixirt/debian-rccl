@@ -1,0 +1,34 @@
+From c46913f6d566ba9a953347254d838b9b683af991 Mon Sep 17 00:00:00 2001
+From: trix <Tom.Rix@amd.com>
+Date: Thu, 17 Oct 2024 11:35:33 +0000
+Subject: [PATCH] no parallel-jobs
+
+---
+ CMakeLists.txt | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 0d130be..bc0a3fa 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -602,7 +602,7 @@ if(DEMANGLE_DIR)
+ endif()
+ 
+ ## Set RCCL compile options
+-target_compile_options(rccl PRIVATE -parallel-jobs=12)
++#target_compile_options(rccl PRIVATE -parallel-jobs=12)
+ target_compile_options(rccl PRIVATE -Wno-format-nonliteral)
+ target_compile_options(rccl PRIVATE -fgpu-rdc)               # Generate relocatable device code (required for extern __shared__)
+ target_compile_options(rccl PRIVATE -fvisibility=hidden)     # Set symbol visibility to hidden by default
+@@ -635,7 +635,7 @@ endif()
+ target_link_libraries(rccl PRIVATE -fgpu-rdc)               # Required when linking relocatable device code
+ 
+ ## Set RCCL link options
+-target_link_options(rccl PRIVATE -parallel-jobs=16)       # Use multiple threads to link
++#target_link_options(rccl PRIVATE -parallel-jobs=16)       # Use multiple threads to link
+ if(BUILD_ADDRESS_SANITIZER)
+   target_link_options(rccl PRIVATE -fuse-ld=lld)
+ endif()
+-- 
+2.45.2
+
