@@ -1,2 +1,3 @@
-usr/bin/UnitTests      usr/libexec/rocm/librccl1-tests
+usr/bin/rccl-UnitTests      usr/libexec/rocm/librccl1-tests
+usr/share/rccl/msccl*/*
 
